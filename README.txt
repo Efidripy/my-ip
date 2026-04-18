@@ -72,6 +72,10 @@ KLEVA My-IP PRO
   Содержимое snippets (пример для prefix /my-ip):
 
   # my-ip-location.conf
+  # port_in_redirect off prevents nginx from adding the listen port
+  # (e.g. :7445) to redirect URLs when running behind a reverse proxy.
+  port_in_redirect off;
+
   location = /my-ip {
       return 301 /my-ip/;
   }
@@ -83,14 +87,30 @@ KLEVA My-IP PRO
   }
 
   # my-ip-php.conf
+  # IMPORTANT: do NOT use "include snippets/fastcgi-php.conf" here — it contains
+  # "try_files $fastcgi_script_name =404" which checks against the server $document_root
+  # (e.g. /var/www/kleva.ru), not the aliased app directory, causing false 404 errors.
   location ~ ^/my-ip/(.+\.php)$ {
-      fastcgi_split_path_info ^((?U).+\.php)(/.+)$;
-      include snippets/fastcgi-php.conf;
+      include fastcgi_params;
       fastcgi_param SCRIPT_FILENAME /var/www/my-ip/$1;
+      fastcgi_param SCRIPT_NAME /my-ip/$1;
       fastcgi_param HTTP_X_REAL_IP $remote_addr;
       fastcgi_param HTTP_X_FORWARDED_FOR $proxy_add_x_forwarded_for;
       fastcgi_pass unix:/run/php/php-fpm.sock;
   }
+
+  # ── If nginx uses PROXY protocol on its listen directive ───────────────
+  # When traffic arrives via PROXY protocol (e.g. HAProxy → nginx),
+  # $remote_addr is the proxy's address (127.0.0.1) instead of the real
+  # client IP. Add these two lines inside the location block above so that
+  # nginx's realip module replaces $remote_addr with the PROXY protocol address:
+  #
+  #     real_ip_header    proxy_protocol;
+  #     set_real_ip_from  0.0.0.0/0;
+  #
+  # The installer automatically adds these lines when you answer "y" to the
+  # "Does nginx use PROXY protocol?" question.
+  # ────────────────────────────────────────────────────────────────────────
 
   sudo nginx -t && sudo systemctl reload nginx
 
