@@ -40,6 +40,41 @@ function mmdb_lookup_value(string $dbFile, string $ip, array $path): ?string {
     return $m[1] !== '' ? $m[1] : $m[2];
 }
 
+/**
+ * HTTP-API fallback via ip-api.com (free, no key, up to 45 req/min).
+ * Used only when local .mmdb databases are absent.
+ * Note: the visitor's IP is sent to ip-api.com.
+ */
+function geo_api_fallback(string $ip): array {
+    $url = 'http://ip-api.com/json/' . rawurlencode($ip)
+         . '?fields=status,country,regionName,city,timezone,as,org';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $raw = @file_get_contents($url, false, $ctx);
+    if (!$raw) {
+        return [];
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data) || ($data['status'] ?? '') !== 'success') {
+        return [];
+    }
+    // "as" field looks like "AS12345 Some ISP" — extract only the number
+    $asn = '';
+    if (!empty($data['as']) && preg_match('/^AS(\d+)/i', $data['as'], $m)) {
+        $asn = $m[1];
+    }
+    return [
+        'country'  => $data['country'] ?? '',
+        'city'     => $data['city'] ?? '',
+        'region'   => $data['regionName'] ?? '',
+        'timezone' => $data['timezone'] ?? '',
+        'asn'      => $asn,
+        'org'      => $data['org'] ?? '',
+    ];
+}
+
 function geo_lookup(string $ip): array {
     $cfg = app_config();
     $out = [
@@ -70,6 +105,17 @@ function geo_lookup(string $ip): array {
     $out['asn'] = mmdb_lookup_value($asnDb, $safeIp, ['autonomous_system_number']) ?? '';
     $out['org'] = mmdb_lookup_value($asnDb, $safeIp, ['autonomous_system_organization']) ?? '';
     $out['accuracy_radius'] = mmdb_lookup_value($cityDb, $safeIp, ['location', 'accuracy_radius']);
+
+    // If local databases are absent, fall back to ip-api.com HTTP API
+    if (!is_file($cityDb) && !is_file($asnDb)) {
+        $api = geo_api_fallback($safeIp);
+        foreach (['country', 'city', 'region', 'timezone', 'asn', 'org'] as $k) {
+            if (!empty($api[$k])) {
+                $out[$k] = $api[$k];
+            }
+        }
+        $out['vpn_hosting_reason'] = 'Данные получены через ip-api.com (локальные базы отсутствуют).';
+    }
 
     $torFile = $cfg['tor_exit_nodes_file'];
     if (is_file($torFile)) {
