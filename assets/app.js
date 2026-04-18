@@ -346,13 +346,17 @@ async function collectClientSignals() {
   const perf = getPerformanceDetails();
   const browser_apis = getBrowserApiAvailability();
   const dnt_js = navigator.doNotTrack ?? null;
-  const [audio, webrtc, battery, incognito, media_devices, audio_ctx_details] = await Promise.all([
+  const gpc = navigator.globalPrivacyControl ?? null;
+  const storage_state = getStorageState();
+  const cookie_test = testCookiePolicy();
+  const [audio, webrtc, battery, incognito, media_devices, audio_ctx_details, client_hints] = await Promise.all([
     audioHash(),
     detectWebRTC(),
     getBatteryInfo(),
     detectIncognito(),
     getMediaDevicesCount(),
     getAudioContextDetails(),
+    getFullClientHints(),
   ]);
 
   const client = {
@@ -391,6 +395,10 @@ async function collectClientSignals() {
     media_devices,
     audio_ctx_details,
     dnt_js,
+    gpc,
+    storage_state,
+    cookie_test,
+    client_hints,
   };
   const fpSource = JSON.stringify([
     client.browser, client.os, client.device, client.engine,
@@ -1111,6 +1119,470 @@ function fillClientDetails(server, client) {
   setText('webrtc-proxy-ports', (client.webrtc.proxy_ports || []).length ? client.webrtc.proxy_ports.join(', ') : '—');
 }
 
+// ============================================================
+// NEW DATA COLLECTORS — v7
+// ============================================================
+
+async function getFullClientHints() {
+  try {
+    if (!navigator.userAgentData?.getHighEntropyValues) return null;
+    return await navigator.userAgentData.getHighEntropyValues([
+      'architecture', 'bitness', 'mobile', 'model',
+      'platform', 'platformVersion', 'uaFullVersion', 'fullVersionList',
+    ]);
+  } catch { return null; }
+}
+
+async function getBrowserPermissions() {
+  if (!navigator.permissions?.query) return null;
+  const perms = ['geolocation', 'camera', 'microphone', 'notifications', 'midi'];
+  const clipPerms = ['clipboard-read', 'clipboard-write'];
+  const result = {};
+  for (const name of perms) {
+    try { result[name] = (await navigator.permissions.query({ name })).state; }
+    catch { result[name] = 'n/a'; }
+  }
+  for (const name of clipPerms) {
+    try { result[name] = (await navigator.permissions.query({ name })).state; }
+    catch { result[name] = 'n/a'; }
+  }
+  return result;
+}
+
+function getStorageState() {
+  const result = {
+    cookies: !!navigator.cookieEnabled,
+    local_storage: false,
+    session_storage: false,
+    indexed_db: !!window.indexedDB,
+  };
+  try { localStorage.setItem('_t', '1'); localStorage.removeItem('_t'); result.local_storage = true; } catch {}
+  try { sessionStorage.setItem('_t', '1'); sessionStorage.removeItem('_t'); result.session_storage = true; } catch {}
+  return result;
+}
+
+async function getStorageQuota() {
+  try {
+    if (!navigator.storage?.estimate) return null;
+    const { quota, usage } = await navigator.storage.estimate();
+    const q = quota ?? null, u = usage ?? null;
+    return {
+      quota_mb: q != null ? Math.round(q / 1048576) : null,
+      usage_mb: u != null ? Math.round(u / 1048576 * 10) / 10 : null,
+      percent: q && u ? Math.round(u / q * 1000) / 10 : null,
+    };
+  } catch { return null; }
+}
+
+async function getServiceWorkerInfo() {
+  const supported = !!navigator.serviceWorker;
+  const cache_api = !!window.caches;
+  if (!supported) return { supported, cache_api, active: false };
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    return { supported, cache_api, active: !!(reg?.active), scope: reg?.scope || null };
+  } catch { return { supported, cache_api, active: false }; }
+}
+
+async function detectAdBlock() {
+  try {
+    const el = document.createElement('div');
+    el.className = 'adsbox pub_300x250 ad-placement ad-unit';
+    el.style.cssText = 'position:absolute;left:-9999px;width:1px;height:1px;pointer-events:none';
+    document.body.appendChild(el);
+    await new Promise(r => setTimeout(r, 120));
+    const hidden = el.offsetParent === null || el.offsetWidth === 0 ||
+                   getComputedStyle(el).display === 'none';
+    document.body.removeChild(el);
+    return { detected: hidden };
+  } catch { return { detected: null }; }
+}
+
+function testCookiePolicy() {
+  const key = '_cptest_' + Math.random().toString(36).slice(2, 8);
+  document.cookie = `${key}=1; path=/; SameSite=Lax`;
+  const ok = document.cookie.indexOf(key) !== -1;
+  document.cookie = `${key}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+  return { first_party_ok: ok, cookies_enabled: !!navigator.cookieEnabled };
+}
+
+function checkUaChConsistency(ua, hints) {
+  if (!hints) return null;
+  const issues = [];
+  if (hints.platform) {
+    const p = hints.platform.toLowerCase();
+    const uaOs = detectOS(ua || '');
+    const map = { windows: 'Windows', linux: 'Linux', macos: 'macOS', android: 'Android' };
+    let found = false;
+    for (const [k, v] of Object.entries(map)) {
+      if (p.includes(k)) { found = true; if (uaOs !== v) issues.push(`OS: UA=${uaOs} / UA-CH=${hints.platform}`); break; }
+    }
+    if (!found && (p === 'iphone os' || p === 'ios') && uaOs !== 'iOS') {
+      issues.push(`OS: UA=${uaOs} / UA-CH=${hints.platform}`);
+    }
+  }
+  if (hints.mobile !== undefined) {
+    const uaMobile = detectDevice(ua || '') !== 'Десктоп';
+    if (uaMobile !== hints.mobile) issues.push(`Mobile: UA=${uaMobile} / UA-CH=${hints.mobile}`);
+  }
+  return { consistent: issues.length === 0, issues };
+}
+
+function getFingerprintDrift(client) {
+  const KEY = 'myip_fp_snap';
+  const snap = {
+    language: client.language, timezone: client.timezone,
+    screen: client.screen, browser: client.browser,
+    os: client.os, dpr: client.dpr, hash: client.fingerprint_hash,
+    ts: Date.now(),
+  };
+  let drift = null;
+  try {
+    const prev = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (prev) {
+      const changed = [];
+      for (const k of ['language', 'timezone', 'screen', 'browser', 'os', 'dpr']) {
+        if (prev[k] !== snap[k]) changed.push({ field: k, from: prev[k], to: snap[k] });
+      }
+      drift = { changed, hash_changed: prev.hash !== snap.hash, prev_ts: prev.ts || null };
+    }
+    localStorage.setItem(KEY, JSON.stringify(snap));
+  } catch {}
+  return drift;
+}
+
+const _RISK_CAT_MAP = {
+  network: ['IP-адрес', 'Reverse DNS', 'X-Forwarded-For', 'X-Real-IP',
+            'WebRTC public leak', 'WebRTC local leak', 'WebRTC proxy port',
+            'DNSBL blacklist', 'Hosting/VPN heuristics', 'Bogon IP в X-Forwarded-For',
+            'Слабая геолокация по IP'],
+  browser: ['Canvas fingerprint', 'Audio fingerprint', 'WebGL renderer',
+            'Font fingerprint', 'Battery API', 'Network Info', 'WebDriver',
+            'Headless browser', 'Приватный режим', 'UA spoof (touch + desktop)'],
+  behavior: ['Timezone mismatch', 'Язык ≠ страна IP', 'System locale mismatch',
+             'PWA standalone mode', 'Forced colors (high contrast)', 'DNT mismatch'],
+  protocol: ['Accept-Encoding: нет brotli', 'Tor exit node'],
+};
+
+function buildRiskCategories(leaks) {
+  const cats = {
+    network:  { label: '🌐 Сеть',         items: [] },
+    browser:  { label: '🖥 Браузер',       items: [] },
+    behavior: { label: '⚠️ Поведение',    items: [] },
+    protocol: { label: '🔒 Протокол',      items: [] },
+    other:    { label: '📋 Прочее',         items: [] },
+  };
+  for (const l of leaks) {
+    let placed = false;
+    for (const [cat, titles] of Object.entries(_RISK_CAT_MAP)) {
+      if (titles.includes(l.title)) { cats[cat].items.push(l); placed = true; break; }
+    }
+    if (!placed) cats.other.items.push(l);
+  }
+  return cats;
+}
+
+function buildRecommendations(server, client, leaks, perms, adblock, gpc, quota) {
+  const recs = [];
+  const add = (prio, label, detail, done) => recs.push({ prio, label, detail, done: !!done });
+
+  if (client.webrtc?.public?.length)
+    add('critical', 'Отключить WebRTC', 'Утечка реального IP через WebRTC. Firefox: media.peerconnection.enabled=false в about:config.', false);
+
+  if (client.canvas_hash && client.canvas_hash !== 'unsupported')
+    add('high', 'Защитить Canvas fingerprint', 'Включи защиту canvas в Brave или используй Tor Browser / расширение CanvasBlocker.', false);
+
+  if (client.audio_hash && client.audio_hash !== 'unsupported')
+    add('high', 'Защитить Audio fingerprint', 'Brave: включи «Fingerprinting Protection». Firefox: расширение CanvasBlocker также блокирует аудио.', false);
+
+  add('high', 'Установить uBlock Origin',
+    adblock?.detected
+      ? 'Блокировщик уже активен — отлично! Убедись, что обновлены фильтры.'
+      : 'Блокировщик рекламы и трекеров существенно снижает слежку. Доступен для всех браузеров.',
+    adblock?.detected);
+
+  add('medium', 'Включить Global Privacy Control',
+    gpc
+      ? 'GPC-сигнал активен — браузер запрашивает «не продавать мои данные».'
+      : 'Brave и Firefox с расширением GPC Signal отправляют этот заголовок.',
+    !!gpc);
+
+  add('low', 'Включить DNT-заголовок',
+    server.dnt
+      ? 'DNT включён. Учти: сайты не обязаны его соблюдать.'
+      : 'Do Not Track сигнализирует о предпочтениях приватности, хотя и не является обязательным.',
+    !!server.dnt);
+
+  if (client.battery)
+    add('medium', 'Сменить браузер / отключить Battery API', 'Firefox отключил Battery API. Chrome продолжает его предоставлять.', false);
+
+  if ((client.fonts_count ?? 0) > 20)
+    add('medium', 'Ограничить доступ к шрифтам', 'Tor Browser ограничивает список шрифтов. Brave частично защищает от font enumeration.', false);
+
+  if (leaks.find(l => l.title === 'Timezone mismatch'))
+    add('high', 'Нормализовать timezone', 'Brave: Settings→Privacy→Use generic time zone. Tor Browser делает это автоматически.', false);
+
+  if (!client.webrtc?.supported || (!client.webrtc?.public?.length && !client.webrtc?.local?.length))
+    add('high', 'WebRTC', 'WebRTC не раскрывает IP — хороший знак.', true);
+
+  if (perms?.geolocation === 'granted')
+    add('medium', 'Отозвать доступ к Геолокации', 'Браузер выдал разрешение на геолокацию. Отзови его в настройках сайта.', false);
+
+  return recs.sort((a, b) => {
+    const o = { critical: 0, high: 1, medium: 2, low: 3 };
+    return (o[a.prio] ?? 9) - (o[b.prio] ?? 9);
+  });
+}
+
+function buildBrowserComparison(client, server, adblock, gpc, perms) {
+  return [
+    { label: 'WebRTC отключён / не течёт', done: !client.webrtc?.supported || (!client.webrtc?.public?.length && !client.webrtc?.local?.length) },
+    { label: 'Canvas fingerprint защищён', done: !client.canvas_hash || client.canvas_hash === 'unsupported' },
+    { label: 'Audio fingerprint защищён', done: !client.audio_hash || client.audio_hash === 'unsupported' },
+    { label: 'Battery API недоступен', done: !client.battery },
+    { label: 'Network Info API недоступен', done: !client.network },
+    { label: 'AdBlock активен', done: !!adblock?.detected },
+    { label: 'GPC включён', done: !!gpc },
+    { label: 'DNT включён', done: !!server.dnt },
+    { label: 'Fonts ≤ 10 системных', done: (client.fonts_count ?? 99) <= 10 },
+    { label: 'WebDriver не обнаружен', done: !client.webdriver },
+    { label: 'Геолокация не granted', done: perms?.geolocation !== 'granted' },
+    { label: 'JS Heap не раскрыт', done: !client.perf?.memory },
+    { label: 'WebGL renderer скрыт', done: !client.webgl?.renderer || client.webgl.renderer === 'unsupported' },
+    { label: 'Камера не granted', done: perms?.camera !== 'granted' },
+  ];
+}
+
+// ============================================================
+// NEW RENDERING FUNCTIONS — v7
+// ============================================================
+
+function fillUaCh(hints, uaConsistency) {
+  if (!hints) {
+    setText('ua-ch-status', 'Не доступно (нужен HTTPS и Chromium-браузер)');
+    return;
+  }
+  setText('ua-ch-status', 'Доступно');
+  setText('ua-ch-platform', hints.platform ?? '—');
+  setText('ua-ch-platformversion', hints.platformVersion ?? '—');
+  setText('ua-ch-architecture', hints.architecture ?? '—');
+  setText('ua-ch-bitness', hints.bitness ?? '—');
+  setText('ua-ch-mobile', hints.mobile != null ? String(hints.mobile) : '—');
+  setText('ua-ch-model', hints.model || '—');
+  setText('ua-ch-uafullversion', hints.uaFullVersion ?? '—');
+  setText('ua-ch-brands', hints.fullVersionList
+    ? hints.fullVersionList.map(b => `${b.brand} ${b.version}`).join(', ')
+    : '—');
+  if (uaConsistency) {
+    setText('ua-ch-consistency', uaConsistency.consistent
+      ? '✅ UA и UA-CH совпадают'
+      : '⚠️ ' + uaConsistency.issues.join('; '));
+  }
+}
+
+function fillPermissions(perms) {
+  const grid = $('perms-grid');
+  if (!grid) return;
+  if (!perms) { grid.innerHTML = '<div class="empty">Permissions API недоступен в этом браузере.</div>'; return; }
+  grid.replaceChildren();
+  const labels = {
+    geolocation: '📍 Геолокация', camera: '📹 Камера', microphone: '🎤 Микрофон',
+    notifications: '🔔 Уведомления', midi: '🎹 MIDI',
+    'clipboard-read': '📋 Буфер чтение', 'clipboard-write': '📋 Буфер запись',
+  };
+  for (const [k, v] of Object.entries(perms)) {
+    const div = document.createElement('div');
+    div.className = 'kv';
+    const label = document.createElement('span');
+    label.textContent = labels[k] || k;
+    const val = document.createElement('strong');
+    val.textContent = v;
+    val.className = v === 'granted' ? 'red-text' : v === 'denied' ? 'green-text' : '';
+    div.appendChild(label); div.appendChild(val);
+    grid.appendChild(div);
+  }
+}
+
+function fillStorageState(state, quota, swInfo) {
+  const yn = v => v ? '✅ доступен' : '❌ заблокирован';
+  setText('store-cookies', yn(state?.cookies));
+  setText('store-local', yn(state?.local_storage));
+  setText('store-session', yn(state?.session_storage));
+  setText('store-idb', yn(state?.indexed_db));
+  setText('store-quota', quota
+    ? `${quota.quota_mb ?? '?'} МБ квоты; исп: ${quota.usage_mb ?? '?'} МБ${quota.percent != null ? ' (' + quota.percent + '%)' : ''}`
+    : '—');
+  setText('store-sw', swInfo?.supported
+    ? (swInfo.active ? '✅ Активен' : '⚠️ Поддерживается, неактивен')
+    : '❌ Не поддерживается');
+  setText('store-cache', swInfo?.cache_api ? '✅ Cache API есть' : '❌ Нет');
+}
+
+function fillNetworkPrivacy(server, client, adblock, cookieTest, gpcJs, respHeaders) {
+  setText('np-gpc-server', server.sec_gpc ? `🟢 Отправляет (Sec-GPC: ${server.sec_gpc})` : '🔴 Заголовок не отправлен');
+  setText('np-gpc-js', gpcJs != null ? (gpcJs ? '🟢 Активен' : '🔴 Выключен') : '— Не поддерживается');
+  setText('np-adblock', adblock?.detected === true ? '🟢 Обнаружен' : adblock?.detected === false ? '🔴 Не обнаружен' : '—');
+  setText('np-cookie-test', cookieTest ? (cookieTest.first_party_ok ? '✅ First-party cookies: OK' : '❌ First-party cookies: заблокированы') : '—');
+  setText('np-referrer-policy', respHeaders.referrerPolicy || '— (заголовок не задан)');
+  setText('np-ip-version', server.client_ip_version || '—');
+  const c = client.network;
+  setText('np-net-type', c ? (c.effective_type || c.type || '—') : '—');
+  setText('np-net-rtt', c?.rtt != null ? `${c.rtt} мс` : '—');
+  setText('np-net-downlink', c?.downlink != null ? `${c.downlink} Мбит/с` : '—');
+  setText('np-save-data', c?.save_data ? '🟢 Включён' : '🔴 Выключен');
+}
+
+function fillSecFetch(server) {
+  setText('sf-site', server.sec_fetch_site || '— (не отправлен)');
+  setText('sf-mode', server.sec_fetch_mode || '—');
+  setText('sf-dest', server.sec_fetch_dest || '—');
+  setText('sf-user', server.sec_fetch_user || '—');
+  setText('sf-gpc', server.sec_gpc || '—');
+  setText('sf-tls', server.tls_version || '— (nginx не передаёт SSL_PROTOCOL в fastcgi)');
+  setText('sf-cipher', server.tls_cipher || '—');
+  setText('sf-http-proto', server.http_version || '—');
+}
+
+function fillPageSecurity(respHeaders) {
+  setText('sec-csp', respHeaders.csp || '— не задан');
+  setText('sec-coop', respHeaders.coop || '— не задан');
+  setText('sec-coep', respHeaders.coep || '— не задан');
+  setText('sec-xfo', respHeaders.xfo || '— не задан');
+  setText('sec-hsts', respHeaders.hsts || '— не задан');
+}
+
+function fillDriftHistory(drift) {
+  const box = $('drift-list');
+  if (!box) return;
+  if (!drift) {
+    box.innerHTML = '<div class="drift-ok">📌 Первый визит — эталон fingerprint сохранён в localStorage.</div>';
+    return;
+  }
+  box.replaceChildren();
+  if (drift.hash_changed) {
+    const el = document.createElement('div');
+    el.className = 'drift-item danger';
+    el.textContent = '⚠️ Fingerprint hash изменился с прошлого визита!';
+    box.appendChild(el);
+  }
+  if (drift.changed.length === 0 && !drift.hash_changed) {
+    const el = document.createElement('div');
+    el.className = 'drift-ok';
+    el.textContent = '✅ Все параметры стабильны с прошлого визита.';
+    box.appendChild(el);
+  }
+  for (const c of drift.changed) {
+    const el = document.createElement('div');
+    el.className = 'drift-item';
+    el.textContent = `${c.field}: «${c.from}» → «${c.to}»`;
+    box.appendChild(el);
+  }
+}
+
+function fillRiskCategories(cats) {
+  const container = $('risk-cats');
+  if (!container) return;
+  container.replaceChildren();
+  let hasAny = false;
+  for (const [, cat] of Object.entries(cats)) {
+    if (cat.items.length === 0) continue;
+    hasAny = true;
+    const total = cat.items.reduce((s, l) => s + (l.level === 'red' ? 18 : l.level === 'yellow' ? 8 : 2), 0);
+    const div = document.createElement('div');
+    div.className = 'cat-block';
+    const h = document.createElement('div');
+    h.className = 'cat-head';
+    h.textContent = `${cat.label} — ${cat.items.length} сигн., −${total} pts`;
+    div.appendChild(h);
+    const ul = document.createElement('ul');
+    ul.className = 'cat-list';
+    for (const l of cat.items) {
+      const li = document.createElement('li');
+      li.className = `cat-item ${l.level}`;
+      li.textContent = l.title;
+      ul.appendChild(li);
+    }
+    div.appendChild(ul);
+    container.appendChild(div);
+  }
+  if (!hasAny) {
+    const el = document.createElement('div');
+    el.className = 'drift-ok';
+    el.textContent = '✅ Нет значимых сигналов.';
+    container.appendChild(el);
+  }
+}
+
+function fillRecommendations(recs) {
+  const box = $('recs-list');
+  if (!box) return;
+  box.replaceChildren();
+  const icons = { critical: '🚨', high: '🔴', medium: '🟡', low: '🟢' };
+  for (const r of recs) {
+    const div = document.createElement('div');
+    div.className = `rec-item${r.done ? ' done' : ''}`;
+    const title = document.createElement('strong');
+    title.textContent = `${icons[r.prio] || '•'} ${r.label}`;
+    const detail = document.createElement('div');
+    detail.className = 'rec-detail';
+    detail.textContent = r.detail;
+    div.appendChild(title);
+    div.appendChild(detail);
+    box.appendChild(div);
+  }
+}
+
+function fillBrowserComparison(items) {
+  const box = $('compare-grid');
+  if (!box) return;
+  const done = items.filter(i => i.done).length;
+  setText('compare-score', `${done} / ${items.length}`);
+  box.replaceChildren();
+  for (const item of items) {
+    const div = document.createElement('div');
+    div.className = `cmp-item ${item.done ? 'pass' : 'fail'}`;
+    div.textContent = `${item.done ? '✅' : '❌'} ${item.label}`;
+    box.appendChild(div);
+  }
+}
+
+function setupExportButtons(getJson) {
+  const jsonBtn = $('export-json-btn');
+  if (jsonBtn) {
+    jsonBtn.addEventListener('click', () => {
+      const blob = new Blob([getJson()], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `myip-report-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  }
+  const txtBtn = $('export-txt-btn');
+  if (txtBtn) {
+    txtBtn.addEventListener('click', () => {
+      try {
+        const d = JSON.parse(getJson());
+        let r = `KLEVA My-IP Privacy Report\n${new Date().toISOString()}\n${'='.repeat(48)}\n`;
+        r += `IP:           ${d.client_server_view?.ip || '?'}\n`;
+        r += `Страна:       ${d.client_server_view?.country || '?'}\n`;
+        r += `ASN:          ${d.client_server_view?.as_org || '?'}\n`;
+        r += `Privacy Score: ${d.privacy_score}/100\n`;
+        r += `Risk level:   ${d.risk_level}\n\n`;
+        r += `Утечки (${(d.leaks || []).length}):\n`;
+        for (const l of (d.leaks || [])) r += `  [${(l.level || '').toUpperCase()}] ${l.title}: ${l.value}\n`;
+        r += `\nAdBlock: ${d.adblock?.detected}\n`;
+        const blob = new Blob([r], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `myip-report-${Date.now()}.txt`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } catch {}
+    });
+  }
+}
+
 async function sendCollect(visitId, client, score, risk, server) {
   try {
     const res = await fetch('./collect.php', {
@@ -1137,16 +1609,47 @@ async function loadAll() {
   try {
     const apiRes = await fetch('./api.php', { cache: 'no-store' });
     if (!apiRes.ok) throw new Error('HTTP ' + apiRes.status);
-    const apiData = await apiRes.json();
+    // Read security response headers before consuming body
+    const respHeaders = {
+      csp: apiRes.headers.get('content-security-policy') || '',
+      coop: apiRes.headers.get('cross-origin-opener-policy') || '',
+      coep: apiRes.headers.get('cross-origin-embedder-policy') || '',
+      xfo: apiRes.headers.get('x-frame-options') || '',
+      hsts: apiRes.headers.get('strict-transport-security') || '',
+      referrerPolicy: apiRes.headers.get('referrer-policy') || '',
+    };
+    const [apiData, client, perms, quota, swInfo, adblock] = await Promise.all([
+      apiRes.json(),
+      collectClientSignals(),
+      getBrowserPermissions(),
+      getStorageQuota(),
+      getServiceWorkerInfo(),
+      detectAdBlock(),
+    ]);
     currentVisitId = apiData.visit_id || null;
     const server = apiData.client || {};
-    const client = await collectClientSignals();
+    const gpcJs = client.gpc;
+    const drift = getFingerprintDrift(client);
+    const uaConsistency = checkUaChConsistency(client.user_agent, client.client_hints);
     const leaks = buildLeakItems(server, client);
     const { score, items: breakdownItems } = calculateScoreBreakdown(server, client, leaks);
     const risk = score >= 80 ? 'green' : score >= 55 ? 'yellow' : 'red';
+    const cats = buildRiskCategories(leaks);
+    const recs = buildRecommendations(server, client, leaks, perms, adblock, gpcJs, quota);
+    const comparison = buildBrowserComparison(client, server, adblock, gpcJs, perms);
 
     fillSummary(server, client, leaks, score, risk, breakdownItems);
     fillClientDetails(server, client);
+    fillUaCh(client.client_hints, uaConsistency);
+    fillPermissions(perms);
+    fillStorageState(client.storage_state, quota, swInfo);
+    fillNetworkPrivacy(server, client, adblock, client.cookie_test, gpcJs, respHeaders);
+    fillSecFetch(server);
+    fillPageSecurity(respHeaders);
+    fillDriftHistory(drift);
+    fillRiskCategories(cats);
+    fillRecommendations(recs);
+    fillBrowserComparison(comparison);
 
     const combined = {
       timestamp_iso8601: apiData.timestamp_iso8601,
@@ -1156,6 +1659,11 @@ async function loadAll() {
       privacy_score: score,
       risk_level: risk,
       leaks,
+      permissions: perms,
+      storage_quota: quota,
+      adblock,
+      ua_consistency: uaConsistency,
+      drift,
     };
     lastJSON = JSON.stringify(combined, null, 2);
     setText('raw-json', lastJSON);
@@ -1205,5 +1713,6 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => $('copy-btn').textContent = 'Скопировать JSON', 1200);
     }
   });
+  setupExportButtons(() => lastJSON || '{}');
   loadAll();
 });

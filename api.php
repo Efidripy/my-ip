@@ -45,6 +45,14 @@ $client = [
     'dnsbl_total' => $dnsbl['total'],
     'dnsbl_blacklists' => $dnsbl['blacklists'],
     'sec_ch_ua' => safe_server('HTTP_SEC_CH_UA'),
+    'sec_gpc' => safe_server('HTTP_SEC_GPC'),
+    'sec_fetch_site' => safe_server('HTTP_SEC_FETCH_SITE'),
+    'sec_fetch_mode' => safe_server('HTTP_SEC_FETCH_MODE'),
+    'sec_fetch_dest' => safe_server('HTTP_SEC_FETCH_DEST'),
+    'sec_fetch_user' => safe_server('HTTP_SEC_FETCH_USER'),
+    'tls_version' => safe_server('SSL_PROTOCOL') ?: safe_server('HTTP_X_SSL_PROTOCOL'),
+    'tls_cipher' => safe_server('SSL_CIPHER') ?: safe_server('HTTP_X_SSL_CIPHER'),
+    'client_ip_version' => (strpos($ip, ':') !== false ? 'IPv6' : 'IPv4'),
 ];
 
 $visitId = null;
