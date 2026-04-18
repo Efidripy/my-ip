@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KLEVA My-IP PRO</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="assets/style.css?v=10">
-  <script defer src="assets/app.js?v=10"></script>
+  <link rel="stylesheet" href="assets/style.css?v=11">
+  <script defer src="assets/app.js?v=11"></script>
 </head>
 <body>
   <div class="bg-glow"></div>
@@ -268,6 +268,7 @@
             <div class="kv"><span>Network</span><strong id="fp-network">—</strong></div>
             <div class="kv"><span>System locale</span><strong id="fp-locale">—</strong></div>
             <div class="kv"><span>Fonts found</span><strong id="fp-fonts-count">—</strong></div>
+            <div class="kv"><span>Fonts list</span><strong id="fp-fonts-list" style="font-size:11px">—</strong></div>
             <div class="kv"><span>UA brands</span><strong id="fp-ua-brands">—</strong></div>
             <div class="kv"><span>Outer/Inner diff</span><strong id="fp-outer-diff">—</strong></div>
             <div class="kv"><span>Screen orientation</span><strong id="fp-orientation">—</strong></div>
@@ -503,6 +504,34 @@
             </div>
           </div>
           <div id="ext-apis-grid" class="feature-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+          <div class="kv-grid" style="margin-top:10px">
+            <div class="kv"><span>Speech voices</span><strong id="speech-voices">—</strong></div>
+            <div class="kv"><span>Browser plugins</span><strong id="plugins-count">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Системные цвета UI</h2>
+              <p>Цвета нативных элементов — чекбокс, select, кнопка — различаются в Windows, macOS, Linux.</p>
+            </div>
+          </div>
+          <div id="system-colors-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Math fingerprint</h2>
+              <p>Значения тригонометрических функций различаются в зависимости от JS-движка, ОС и архитектуры процессора.</p>
+            </div>
+          </div>
+          <div id="math-fp-grid" class="kv-grid">
             <div class="empty">Загрузка…</div>
           </div>
         </section>

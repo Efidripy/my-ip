@@ -149,17 +149,40 @@ function getCssSupportFeatures() {
 
 function getSystemColors() {
   try {
-    const inp = document.createElement('input');
-    inp.type = 'checkbox';
-    inp.style.cssText = 'position:absolute;left:-9999px;visibility:hidden';
-    document.body.appendChild(inp);
-    const st = getComputedStyle(inp);
-    const accent = st.accentColor || null;
-    document.body.removeChild(inp);
-    return {
-      accent_color:  accent,
-      color_scheme:  getComputedStyle(document.documentElement).colorScheme || null,
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:absolute;left:-9999px;visibility:hidden';
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    wrap.appendChild(chk);
+
+    const sel = document.createElement('select');
+    const opt = document.createElement('option');
+    opt.textContent = 'x';
+    sel.appendChild(opt);
+    wrap.appendChild(sel);
+
+    const btn = document.createElement('button');
+    btn.textContent = 'x';
+    wrap.appendChild(btn);
+
+    document.body.appendChild(wrap);
+    const chkSt = getComputedStyle(chk);
+    const selSt = getComputedStyle(sel);
+    const btnSt = getComputedStyle(btn);
+    const result = {
+      accent_color:       chkSt.accentColor || null,
+      color_scheme:       getComputedStyle(document.documentElement).colorScheme || null,
+      checkbox_bg:        chkSt.backgroundColor || null,
+      checkbox_border:    chkSt.borderColor || null,
+      select_bg:          selSt.backgroundColor || null,
+      select_color:       selSt.color || null,
+      button_bg:          btnSt.backgroundColor || null,
+      button_border:      btnSt.borderColor || null,
+      scrollbar_color:    getComputedStyle(document.documentElement).scrollbarColor || null,
     };
+    document.body.removeChild(wrap);
+    return result;
   } catch { return null; }
 }
 
@@ -184,6 +207,53 @@ function getExtendedApis() {
     screen_capture:        has(navigator.mediaDevices || {}, 'getDisplayMedia'),
     window_management:     typeof window.getScreenDetails === 'function',
   };
+}
+
+function getMathFingerprint() {
+  try {
+    return {
+      tan:   Math.tan(-1e300),
+      sin:   Math.sin(Math.PI),
+      cos:   Math.cos(Math.PI),
+      acos:  Math.acos(0.123456789),
+      atan2: Math.atan2(90, 15),
+      exp:   Math.exp(1),
+      log:   Math.log(Math.PI),
+      sinh:  Math.sinh(1),
+      cosh:  Math.cosh(1),
+      tanh:  Math.tanh(1),
+      sqrt2: Math.SQRT2,
+    };
+  } catch { return null; }
+}
+
+async function getSpeechVoices() {
+  try {
+    if (!window.speechSynthesis) return null;
+    let voices = window.speechSynthesis.getVoices();
+    if (!voices.length) {
+      await new Promise((res) => {
+        const tid = setTimeout(res, 500);
+        window.speechSynthesis.onvoiceschanged = () => { clearTimeout(tid); res(); };
+      });
+      voices = window.speechSynthesis.getVoices();
+    }
+    return {
+      count: voices.length,
+      sample: voices.slice(0, 6).map(v => v.name),
+      langs: [...new Set(voices.map(v => v.lang).filter(Boolean))].slice(0, 8),
+    };
+  } catch { return null; }
+}
+
+function getPluginsInfo() {
+  try {
+    const plugins = Array.from(navigator.plugins || []);
+    return {
+      count: plugins.length,
+      names: plugins.slice(0, 6).map(p => p.name).filter(Boolean),
+    };
+  } catch { return null; }
 }
 
 async function detectIPv6() {
@@ -439,7 +509,7 @@ async function collectClientSignals() {
   const gpc = navigator.globalPrivacyControl ?? null;
   const storage_state = getStorageState();
   const cookie_test = testCookiePolicy();
-  const [audio, webrtc, battery, incognito, media_devices, audio_ctx_details, client_hints] = await Promise.all([
+  const [audio, webrtc, battery, incognito, media_devices, audio_ctx_details, client_hints, speech_voices] = await Promise.all([
     audioHash(),
     detectWebRTC(),
     getBatteryInfo(),
@@ -447,6 +517,7 @@ async function collectClientSignals() {
     getMediaDevicesCount(),
     getAudioContextDetails(),
     getFullClientHints(),
+    getSpeechVoices(),
   ]);
 
   const client = {
@@ -492,6 +563,10 @@ async function collectClientSignals() {
     system_colors: getSystemColors(),
     webgl_detailed: getWebGLDetailedInfo(),
     extended_apis: getExtendedApis(),
+    math_fp: getMathFingerprint(),
+    speech_voices: speech_voices,
+    plugins: getPluginsInfo(),
+    fonts_list: fonts.slice(0, 12),
   };
   const fpSource = JSON.stringify([
     client.browser, client.os, client.device, client.engine,
@@ -1156,6 +1231,7 @@ function fillClientDetails(server, client) {
   setText('fp-network', client.network?.effective_type || client.network?.type || '—');
   setText('fp-locale', client.system_locale ? `${client.system_locale.number} / ${client.system_locale.collator}` : '—');
   setText('fp-fonts-count', client.fonts_count != null ? String(client.fonts_count) : '—');
+  setText('fp-fonts-list', (client.fonts_list || []).join(', ') || '—');
   setText('fp-ua-brands', (client.ua_brands || []).join(', ') || '—');
 
   // Headless / automation signals
@@ -1872,6 +1948,95 @@ function setupExportButtons(getJson) {
 // NEW RENDERING FUNCTIONS — v10
 // ============================================================
 
+function fillSystemColors(colors) {
+  const grid = $('system-colors-grid');
+  if (!grid) return;
+  if (!colors) { grid.innerHTML = '<div class="empty">—</div>'; return; }
+  grid.replaceChildren();
+  const rows = [
+    ['Accent color', colors.accent_color],
+    ['Color scheme', colors.color_scheme],
+    ['Checkbox bg', colors.checkbox_bg],
+    ['Checkbox border', colors.checkbox_border],
+    ['Select bg', colors.select_bg],
+    ['Select color', colors.select_color],
+    ['Button bg', colors.button_bg],
+    ['Scrollbar color', colors.scrollbar_color],
+  ];
+  for (const [label, value] of rows) {
+    if (!value) continue;
+    const div = document.createElement('div');
+    div.className = 'kv';
+    const s = document.createElement('span');
+    s.textContent = label;
+    const strong = document.createElement('strong');
+    strong.style.fontFamily = 'var(--mono)';
+    strong.style.fontSize = '12px';
+    strong.textContent = value;
+    // Show color swatch for color values
+    if (/^rgb|#|hsl/.test(value)) {
+      const swatch = document.createElement('span');
+      swatch.style.cssText = `display:inline-block;width:12px;height:12px;border-radius:3px;background:${value};border:1px solid var(--line);margin-left:6px;vertical-align:middle`;
+      strong.appendChild(swatch);
+    }
+    div.appendChild(s);
+    div.appendChild(strong);
+    grid.appendChild(div);
+  }
+}
+
+function fillMathFingerprint(mathFp) {
+  const grid = $('math-fp-grid');
+  if (!grid) return;
+  if (!mathFp) { grid.innerHTML = '<div class="empty">—</div>'; return; }
+  grid.replaceChildren();
+  const labels = {
+    tan: 'Math.tan(-1e300)', sin: 'Math.sin(π)', cos: 'Math.cos(π)',
+    acos: 'Math.acos(0.123…)', atan2: 'Math.atan2(90,15)',
+    exp: 'Math.exp(1)', log: 'Math.log(π)',
+    sinh: 'Math.sinh(1)', cosh: 'Math.cosh(1)', tanh: 'Math.tanh(1)',
+    sqrt2: 'Math.SQRT2',
+  };
+  for (const [k, label] of Object.entries(labels)) {
+    const v = mathFp[k];
+    if (v === undefined) continue;
+    const div = document.createElement('div');
+    div.className = 'kv';
+    const s = document.createElement('span');
+    s.textContent = label;
+    const strong = document.createElement('strong');
+    strong.style.fontFamily = 'var(--mono)';
+    strong.style.fontSize = '11px';
+    strong.textContent = typeof v === 'number' ? v.toString() : String(v);
+    div.appendChild(s);
+    div.appendChild(strong);
+    grid.appendChild(div);
+  }
+}
+
+function fillSpeechAndPlugins(speech, plugins) {
+  const speechEl = $('speech-voices');
+  if (speechEl) {
+    if (!speech) { speechEl.textContent = 'Не поддерживается'; }
+    else {
+      speechEl.textContent = `${speech.count} голос(ов)`;
+      if (speech.sample && speech.sample.length) {
+        speechEl.textContent += ' — ' + speech.sample.slice(0, 3).join(', ') + (speech.count > 3 ? '…' : '');
+      }
+    }
+  }
+  const pluginsEl = $('plugins-count');
+  if (pluginsEl) {
+    if (!plugins) { pluginsEl.textContent = '—'; }
+    else {
+      pluginsEl.textContent = String(plugins.count);
+      if (plugins.names && plugins.names.length) {
+        pluginsEl.textContent += ' — ' + plugins.names.join(', ');
+      }
+    }
+  }
+}
+
 function fillHttpHeaders(headers) {
   const grid = $('http-headers-grid');
   if (!grid) return;
@@ -2199,6 +2364,9 @@ async function loadAll() {
     fillWebGLDetailed(client.webgl_detailed || null);
     fillCssSupports(client.css_supports || null);
     fillExtendedApis(client.extended_apis || null);
+    fillSystemColors(client.system_colors || null);
+    fillMathFingerprint(client.math_fp || null);
+    fillSpeechAndPlugins(client.speech_voices || null, client.plugins || null);
 
     const combined = {
       timestamp_iso8601: apiData.timestamp_iso8601,
