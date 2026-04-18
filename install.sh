@@ -47,6 +47,11 @@ ask "Nginx snippets directory [/etc/nginx/snippets]: "
 read -r NGINX_SNIPPETS
 NGINX_SNIPPETS="${NGINX_SNIPPETS:-/etc/nginx/snippets}"
 
+ask "Does nginx use PROXY protocol on its listen directive? [y/N]: "
+read -r PROXY_PROTO_ANSWER
+USE_PROXY_PROTO=false
+[[ "${PROXY_PROTO_ANSWER,,}" == "y" ]] && USE_PROXY_PROTO=true
+
 echo
 
 # ── detect PHP version early so we can suggest the right socket ──────────────
@@ -120,6 +125,17 @@ mkdir -p "$NGINX_SNIPPETS"
 SNIPPET_LOC="$NGINX_SNIPPETS/my-ip-location.conf"
 SNIPPET_PHP="$NGINX_SNIPPETS/my-ip-php.conf"
 
+# Build real-IP directives: when PROXY protocol is active $remote_addr is the
+# upstream proxy (127.0.0.1), so we tell nginx to extract the real client IP
+# from the PROXY protocol header instead.
+if $USE_PROXY_PROTO; then
+    REAL_IP_BLOCK="    # PROXY protocol: expose real client IP via nginx realip module
+    real_ip_header    proxy_protocol;
+    set_real_ip_from  0.0.0.0/0;"
+else
+    REAL_IP_BLOCK=""
+fi
+
 if [[ "$URL_PREFIX" == "/" ]]; then
     # Root install — serve directly from INSTALL_DIR
     cat > "$SNIPPET_LOC" <<NGINX_LOC
@@ -135,6 +151,7 @@ NGINX_LOC
 # KLEVA My-IP PRO — PHP handler (root)
 location ~ \.php$ {
     root ${INSTALL_DIR};
+${REAL_IP_BLOCK}
     include snippets/fastcgi-php.conf;
     fastcgi_param SCRIPT_FILENAME \${INSTALL_DIR}\$fastcgi_script_name;
     fastcgi_param HTTP_X_REAL_IP \$remote_addr;
@@ -169,6 +186,7 @@ NGINX_LOC
 # \$document_root (the server root, e.g. /var/www/kleva.ru) rather than the
 # aliased app directory, producing a false 404 for every PHP request.
 location ~ ^/${STRIPPED}/(.+\.php)$ {
+${REAL_IP_BLOCK}
     include fastcgi_params;
     fastcgi_param SCRIPT_FILENAME ${INSTALL_DIR}/\$1;
     fastcgi_param SCRIPT_NAME /${STRIPPED}/\$1;

@@ -99,6 +99,19 @@ KLEVA My-IP PRO
       fastcgi_pass unix:/run/php/php-fpm.sock;
   }
 
+  # ── If nginx uses PROXY protocol on its listen directive ───────────────
+  # When traffic arrives via PROXY protocol (e.g. HAProxy → nginx),
+  # $remote_addr is the proxy's address (127.0.0.1) instead of the real
+  # client IP. Add these two lines inside the location block above so that
+  # nginx's realip module replaces $remote_addr with the PROXY protocol address:
+  #
+  #     real_ip_header    proxy_protocol;
+  #     set_real_ip_from  0.0.0.0/0;
+  #
+  # The installer automatically adds these lines when you answer "y" to the
+  # "Does nginx use PROXY protocol?" question.
+  # ────────────────────────────────────────────────────────────────────────
+
   sudo nginx -t && sudo systemctl reload nginx
 
 ════════════════════════════════════════════
