@@ -90,16 +90,10 @@ function getWebGLInfo() {
       ? `${gl.getParameter(ext.UNMASKED_VENDOR_WEBGL)} / ${gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)}`
       : 'available';
     const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-    const vp = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
-    const precV = gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_FLOAT);
-    const precF = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
     const exts = (gl.getSupportedExtensions() || []).length;
     return {
       renderer,
       max_texture_size: maxTex || null,
-      max_viewport: vp ? `${vp[0]} × ${vp[1]}` : null,
-      vertex_precision: precV ? precV.precision : null,
-      fragment_precision: precF ? precF.precision : null,
       extensions_count: exts,
     };
   } catch { return { renderer: 'unsupported' }; }
@@ -1534,7 +1528,8 @@ function buildBrowserComparison(client, server, adblock, gpc, perms) {
 // NEW RENDERING FUNCTIONS — v7
 // ============================================================
 
-function fillUaCh(hints, uaConsistency) {
+function fillUaCh(hints, uaConsistency, secChUaHeader) {
+  setText('ua-ch-sec-header', secChUaHeader || '—');
   if (!hints) {
     setText('ua-ch-status', 'Не доступно (нужен HTTPS и Chromium-браузер)');
     return;
@@ -1837,7 +1832,7 @@ async function loadAll() {
     fillClientDetails(server, client);
     fillIpIntelligence(server);
     fillServerExposure(server);
-    fillUaCh(client.client_hints, uaConsistency);
+    fillUaCh(client.client_hints, uaConsistency, server.sec_ch_ua);
     fillPermissions(perms);
     fillStorageState(client.storage_state, quota, swInfo);
     fillNetworkPrivacy(server, client, adblock, client.cookie_test, gpcJs, respHeaders);
@@ -1863,7 +1858,6 @@ async function loadAll() {
       drift,
     };
     lastJSON = JSON.stringify(combined, null, 2);
-    setText('raw-json', lastJSON);
     if (statusDot) statusDot.className = 'dot';
     if (statusText) statusText.textContent = 'API online';
 
@@ -1894,7 +1888,6 @@ async function loadAll() {
     console.error(err);
     if (statusDot) { statusDot.className = 'dot error'; }
     if (statusText) statusText.textContent = 'API error';
-    setText('raw-json', String(err));
   }
 }
 

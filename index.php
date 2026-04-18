@@ -282,6 +282,7 @@
             <span class="pill subtle" id="ua-ch-status">—</span>
           </div>
           <div class="kv-grid">
+            <div class="kv"><span>Sec-CH-UA (заголовок)</span><strong class="mono" id="ua-ch-sec-header">—</strong></div>
             <div class="kv"><span>Platform</span><strong id="ua-ch-platform">—</strong></div>
             <div class="kv"><span>Platform version</span><strong id="ua-ch-platformversion">—</strong></div>
             <div class="kv"><span>Architecture</span><strong id="ua-ch-architecture">—</strong></div>

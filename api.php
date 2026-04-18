@@ -39,7 +39,6 @@ $client = [
     'reverse_dns'          => $rdns,
     'x_forwarded_for'      => mask_private_in_xff($raw_xff),
     'x_real_ip'            => safe_server('HTTP_X_REAL_IP'),
-    'scheme'               => $https ? 'https' : 'http',
     'https'                => $https,
     'http_version'         => safe_server('SERVER_PROTOCOL'),
     'accept_language'      => safe_server('HTTP_ACCEPT_LANGUAGE'),
