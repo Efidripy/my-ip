@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KLEVA My-IP PRO</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="assets/style.css?v=4">
-  <script defer src="assets/app.js?v=4"></script>
+  <link rel="stylesheet" href="assets/style.css?v=6">
+  <script defer src="assets/app.js?v=6"></script>
 </head>
 <body>
   <div class="bg-glow"></div>
@@ -19,10 +19,12 @@
         <p>Показываем только то, что сайты и трекеры видят о посетителе. Без данных о сервере.</p>
       </div>
       <div class="hero-pills">
-        <div class="pill"><span class="dot"></span> <span id="api-status">API online</span></div>
+        <div class="pill"><span class="dot" id="status-dot"></span> <span id="api-status">Загрузка…</span></div>
         <div class="pill">Обновлено: <span id="updated-at">—</span></div>
       </div>
     </header>
+
+    <div id="prev-visit-banner" class="prev-visit-banner" style="display:none"></div>
 
     <section class="grid">
       <div class="left-col">
@@ -55,13 +57,28 @@
             </div>
 
             <div class="side-panel">
-              <div class="stats-2x2">
-                <div class="stat-box"><span>Privacy score</span><strong id="privacy-score">—</strong></div>
-                <div class="stat-box"><span>Risk level</span><strong id="risk-level">—</strong></div>
-                <div class="stat-box"><span>VPN / hosting</span><strong id="vpn-risk">—</strong></div>
-                <div class="stat-box"><span>WebRTC</span><strong id="webrtc-status">—</strong></div>
+              <div class="score-threat-row">
+                <div class="stat-box score-stat">
+                  <span>Privacy score</span>
+                  <strong id="privacy-score">—</strong>
+                </div>
+                <div class="threat-indicator" id="threat-indicator">
+                  <span class="threat-icon" id="threat-icon">—</span>
+                  <div class="threat-text">
+                    <div class="threat-label">Threat level</div>
+                    <div class="threat-value" id="risk-level">—</div>
+                  </div>
+                </div>
               </div>
               <div class="scorebar"><span id="scorebar-fill"></span></div>
+              <div class="sparkline-wrap">
+                <div class="sparkline-label">История score</div>
+                <canvas id="score-sparkline" class="sparkline" height="48"></canvas>
+              </div>
+              <div class="sub-stats-row">
+                <div class="sub-stat"><span>VPN / hosting</span><strong id="vpn-risk">—</strong></div>
+                <div class="sub-stat"><span>WebRTC</span><strong id="webrtc-status">—</strong></div>
+              </div>
               <p class="muted" id="score-explain">Оцениваем, сколько данных посетитель светит обычному сайту и продвинутому трекеру.</p>
               <div class="actions">
                 <button type="button" class="btn primary" id="refresh-btn">Обновить</button>
@@ -80,6 +97,18 @@
           </div>
           <div class="leak-list" id="leak-list">
             <div class="empty">Собираем сигналы…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Разбивка score</h2>
+              <p>Что и сколько очков снизило твой privacy score.</p>
+            </div>
+          </div>
+          <div class="breakdown-grid" id="breakdown-grid">
+            <div class="empty">Анализируем…</div>
           </div>
         </section>
 
@@ -105,6 +134,10 @@
             <div class="kv"><span>Гео timezone</span><strong id="kv-geo-tz">—</strong></div>
             <div class="kv"><span>ASN org</span><strong id="kv-org">—</strong></div>
             <div class="kv"><span>Tor</span><strong id="kv-tor">—</strong></div>
+            <div class="kv"><span>DNSBL</span><strong id="kv-dnsbl">—</strong></div>
+            <div class="kv"><span>Accept-Encoding</span><strong id="kv-accept-encoding">—</strong></div>
+            <div class="kv"><span>Bogon в XFF</span><strong id="kv-bogon-xff">—</strong></div>
+            <div class="kv"><span>Точность геолокации</span><strong id="kv-geo-accuracy">—</strong></div>
           </div>
         </section>
       </div>
@@ -138,6 +171,25 @@
             <div class="kv"><span>Audio hash</span><strong class="mono" id="fp-audio">—</strong></div>
             <div class="kv"><span>WebGL</span><strong id="fp-webgl">—</strong></div>
             <div class="kv"><span>Fingerprint hash</span><strong class="mono" id="fp-hash">—</strong></div>
+            <div class="kv"><span>Incognito</span><strong id="fp-incognito">—</strong></div>
+            <div class="kv"><span>Battery</span><strong id="fp-battery">—</strong></div>
+            <div class="kv"><span>Network</span><strong id="fp-network">—</strong></div>
+            <div class="kv"><span>System locale</span><strong id="fp-locale">—</strong></div>
+            <div class="kv"><span>Fonts found</span><strong id="fp-fonts-count">—</strong></div>
+            <div class="kv"><span>UA brands</span><strong id="fp-ua-brands">—</strong></div>
+            <div class="kv"><span>Outer/Inner diff</span><strong id="fp-outer-diff">—</strong></div>
+            <div class="kv"><span>Screen orientation</span><strong id="fp-orientation">—</strong></div>
+            <div class="kv"><span>PDF viewer</span><strong id="fp-pdf-viewer">—</strong></div>
+            <div class="kv"><span>OffscreenCanvas</span><strong id="fp-offscreen-canvas">—</strong></div>
+            <div class="kv"><span>Max touch points</span><strong id="fp-max-touch">—</strong></div>
+            <div class="kv"><span>DNT (JS)</span><strong id="fp-dnt-js">—</strong></div>
+            <div class="kv"><span>CSS media</span><strong id="fp-css-media">—</strong></div>
+            <div class="kv"><span>JS Heap</span><strong id="fp-perf-memory">—</strong></div>
+            <div class="kv"><span>Clock resolution</span><strong id="fp-clock-res">—</strong></div>
+            <div class="kv"><span>TZ offset</span><strong id="fp-tz-offset">—</strong></div>
+            <div class="kv"><span>Media devices</span><strong id="fp-media-devices">—</strong></div>
+            <div class="kv"><span>AudioContext</span><strong id="fp-audio-ctx">—</strong></div>
+            <div class="kv"><span>Browser APIs</span><strong id="fp-browser-apis">—</strong></div>
           </div>
         </section>
 
@@ -153,6 +205,7 @@
             <div class="kv"><span>Local candidates</span><strong class="mono" id="webrtc-local">—</strong></div>
             <div class="kv"><span>Public candidates</span><strong class="mono" id="webrtc-public">—</strong></div>
             <div class="kv"><span>mDNS candidates</span><strong class="mono" id="webrtc-mdns">—</strong></div>
+            <div class="kv"><span>Proxy ports</span><strong class="mono" id="webrtc-proxy-ports">—</strong></div>
           </div>
         </section>
 

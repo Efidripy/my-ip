@@ -56,10 +56,43 @@ function detect_risk_level(int $score): string {
     return 'red';
 }
 
+function is_bogon_ip(string $ip): bool {
+    if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        return false;
+    }
+    $parts = explode('.', $ip);
+    $a = (int)$parts[0];
+    $b = (int)$parts[1];
+    if ($a === 0) return true;                                 // 0.0.0.0/8
+    if ($a === 10) return true;                                // 10.0.0.0/8 RFC 1918
+    if ($a === 100 && $b >= 64 && $b <= 127) return true;     // 100.64.0.0/10 RFC 6598 CGN
+    if ($a === 127) return true;                               // 127.0.0.0/8 loopback
+    if ($a === 169 && $b === 254) return true;                 // 169.254.0.0/16 link-local
+    if ($a === 172 && $b >= 16 && $b <= 31) return true;      // 172.16.0.0/12 RFC 1918
+    if ($a === 192 && $b === 0) return true;                   // 192.0.0.0/24, 192.0.2.0/24
+    if ($a === 192 && $b === 168) return true;                 // 192.168.0.0/16 RFC 1918
+    if ($a === 198 && $b === 51) return true;                  // 198.51.100.0/24 TEST-NET-2
+    if ($a === 203 && $b === 0) return true;                   // 203.0.113.0/24 TEST-NET-3
+    if ($a >= 240) return true;                                // 240.0.0.0/4 reserved
+    return false;
+}
+
+function check_bogon_in_xff(string $xff): bool {
+    if ($xff === '') {
+        return false;
+    }
+    foreach (explode(',', $xff) as $part) {
+        if (is_bogon_ip(trim($part))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function is_admin_authorized(): bool {
     $cfg = app_config();
     $token = $cfg['admin_token'] ?? '';
-    if ($token === '' || $token === 'CHANGE_ME_STRONG_TOKEN') {
+    if ($token === '') {
         return false;
     }
     $provided = $_GET['token'] ?? $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? '';
@@ -69,7 +102,7 @@ function is_admin_authorized(): bool {
 function require_admin(): void {
     if (!is_admin_authorized()) {
         http_response_code(403);
-        echo '<!doctype html><meta charset="utf-8"><title>403</title><body style="font-family:sans-serif;background:#0b1220;color:#fff;padding:32px">403 — admin token required.<br>Открой страницу как <code>?token=YOUR_TOKEN</code> после замены токена в <code>inc/config.php</code>.</body>';
+        echo '<!doctype html><meta charset="utf-8"><title>403</title><body style="font-family:sans-serif;background:#0b1220;color:#fff;padding:32px">403 — access denied.</body>';
         exit;
     }
 }

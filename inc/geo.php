@@ -1,9 +1,28 @@
 <?php
 declare(strict_types=1);
 
+function normalize_ip(string $ip): string {
+    $normalized = trim($ip);
+    if ($normalized === '') {
+        return '';
+    }
+    return filter_var($normalized, FILTER_VALIDATE_IP) ? $normalized : '';
+}
+
 function mmdb_lookup_value(string $dbFile, string $ip, array $path): ?string {
     if (!is_file($dbFile)) return null;
-    $cmd = array_merge(['mmdblookup', '--file', $dbFile, '--ip', $ip], $path);
+    $safeIp = normalize_ip($ip);
+    if ($safeIp === '') {
+        return null;
+    }
+    $safePath = [];
+    foreach ($path as $part) {
+        if (!is_string($part) || !preg_match('/^[a-zA-Z0-9_]+$/', $part)) {
+            return null;
+        }
+        $safePath[] = $part;
+    }
+    $cmd = array_merge(['mmdblookup', '--file', $dbFile, '--ip', $safeIp], $safePath);
     $descriptors = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
     $proc = @proc_open($cmd, $descriptors, $pipes);
     if (!is_resource($proc)) return null;
@@ -33,31 +52,34 @@ function geo_lookup(string $ip): array {
         'tor' => false,
         'vpn_hosting_risk' => 'unknown',
         'vpn_hosting_reason' => 'Нет локальных баз или недостаточно данных.',
+        'accuracy_radius' => null,
     ];
 
-    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+    $safeIp = normalize_ip($ip);
+    if ($safeIp === '') {
         return $out;
     }
 
     $cityDb = $cfg['geo_city_db'];
     $asnDb = $cfg['geo_asn_db'];
 
-    $out['country'] = mmdb_lookup_value($cityDb, $ip, ['country', 'names', 'en']) ?? '';
-    $out['city'] = mmdb_lookup_value($cityDb, $ip, ['city', 'names', 'en']) ?? '';
-    $out['region'] = mmdb_lookup_value($cityDb, $ip, ['subdivisions', '0', 'names', 'en']) ?? '';
-    $out['timezone'] = mmdb_lookup_value($cityDb, $ip, ['location', 'time_zone']) ?? '';
-    $out['asn'] = mmdb_lookup_value($asnDb, $ip, ['autonomous_system_number']) ?? '';
-    $out['org'] = mmdb_lookup_value($asnDb, $ip, ['autonomous_system_organization']) ?? '';
+    $out['country'] = mmdb_lookup_value($cityDb, $safeIp, ['country', 'names', 'en']) ?? '';
+    $out['city'] = mmdb_lookup_value($cityDb, $safeIp, ['city', 'names', 'en']) ?? '';
+    $out['region'] = mmdb_lookup_value($cityDb, $safeIp, ['subdivisions', '0', 'names', 'en']) ?? '';
+    $out['timezone'] = mmdb_lookup_value($cityDb, $safeIp, ['location', 'time_zone']) ?? '';
+    $out['asn'] = mmdb_lookup_value($asnDb, $safeIp, ['autonomous_system_number']) ?? '';
+    $out['org'] = mmdb_lookup_value($asnDb, $safeIp, ['autonomous_system_organization']) ?? '';
+    $out['accuracy_radius'] = mmdb_lookup_value($cityDb, $safeIp, ['location', 'accuracy_radius']);
 
     $torFile = $cfg['tor_exit_nodes_file'];
     if (is_file($torFile)) {
         $lines = @file($torFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
         $set = array_flip(array_map('trim', $lines));
-        $out['tor'] = isset($set[$ip]);
+        $out['tor'] = isset($set[$safeIp]);
     }
 
     $org = strtolower($out['org']);
-    $rdns = strtolower(get_reverse_dns($ip));
+    $rdns = strtolower(get_reverse_dns($safeIp));
     $signals = [
         'amazon', 'aws', 'google cloud', 'digitalocean', 'microsoft', 'azure', 'ovh', 'hetzner', 'vultr', 'linode', 'oracle cloud',
         'choopa', 'server', 'hosting', 'datacenter', 'colo', 'cloud', 'vpn', 'proxy', 'tor', 'contabo', 'scaleway', 'leaseweb', 'iq network',

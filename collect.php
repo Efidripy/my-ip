@@ -36,8 +36,25 @@ try {
         ':notes' => $notes,
         ':id' => $visitId,
     ]);
+
+    $prevVisit = null;
+    if ($clientHash !== '') {
+        $currentIp = get_client_ip();
+        $prevStmt = $pdo->prepare(
+            'SELECT id, created_at, ip FROM visits WHERE client_hash = :hash AND id != :id ORDER BY created_at DESC LIMIT 1'
+        );
+        $prevStmt->execute([':hash' => $clientHash, ':id' => $visitId]);
+        $prev = $prevStmt->fetch();
+        if ($prev) {
+            $daysDiff = (int)round((time() - (int)strtotime((string)$prev['created_at'])) / 86400);
+            $prevVisit = [
+                'days_ago' => max(0, $daysDiff),
+                'same_ip'  => (string)$prev['ip'] === $currentIp,
+            ];
+        }
+    }
 } catch (Throwable $e) {
     json_response(['ok' => false, 'error' => $e->getMessage()], 500);
 }
 
-json_response(['ok' => true]);
+json_response(['ok' => true, 'prev_visit' => $prevVisit]);
