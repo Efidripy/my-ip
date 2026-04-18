@@ -1123,6 +1123,141 @@ function fillClientDetails(server, client) {
 // NEW DATA COLLECTORS — v7
 // ============================================================
 
+// ============================================================
+// IP INTELLIGENCE & SERVER EXPOSURE — v8
+// ============================================================
+
+function fillIpIntelligence(server) {
+  const asnType = server.asn_type || 'unknown';
+  const asnLabels = {
+    datacenter: '🏢 Датацентр / Хостинг',
+    mobile: '📱 Мобильная сеть',
+    residential: '🏠 Резидентная сеть',
+    unknown: '❓ Неизвестно',
+  };
+  const asnColors = {
+    datacenter: 'red-text',
+    mobile: 'yellow-text',
+    residential: 'green-text',
+    unknown: '',
+  };
+
+  setText('asn-type-pill', asnLabels[asnType] || asnType);
+  const asnTypeEl = $('ip-asn-type');
+  if (asnTypeEl) {
+    asnTypeEl.textContent = asnLabels[asnType] || asnType;
+    asnTypeEl.className = asnColors[asnType] || '';
+  }
+
+  setText('ip-version-intel', server.client_ip_version || '—');
+  setText('ip-org-intel', [server.asn ? 'AS' + server.asn : '', server.as_org].filter(Boolean).join(' • ') || '—');
+  setText('ip-region-intel', [server.city, server.region, server.country].filter(Boolean).join(', ') || '—');
+
+  // Proxy confidence composite score
+  let confScore = 0;
+  const confReasons = [];
+  if (server.vpn_hosting_risk === 'high') { confScore += 3; confReasons.push('Tor'); }
+  else if (server.vpn_hosting_risk === 'medium') { confScore += 2; confReasons.push('VPN/хостинг'); }
+  if ((server.dnsbl_listed ?? 0) > 0) { confScore += 2; confReasons.push('DNSBL'); }
+  if (server.bogon_in_xff) { confScore += 1; confReasons.push('bogon XFF'); }
+  if (asnType === 'datacenter') { confScore += 1; confReasons.push('datacenter ASN'); }
+
+  const confEl = $('ip-proxy-conf');
+  if (confEl) {
+    const reason = confReasons.length ? ' (' + confReasons.join(', ') + ')' : '';
+    if (confScore >= 4) {
+      confEl.textContent = '🔴 Высокая' + reason;
+      confEl.className = 'red-text';
+    } else if (confScore >= 2) {
+      confEl.textContent = '🟡 Средняя' + reason;
+      confEl.className = 'yellow-text';
+    } else if (confScore >= 1) {
+      confEl.textContent = '🟡 Низкая' + reason;
+      confEl.className = 'yellow-text';
+    } else {
+      confEl.textContent = '🟢 Минимальная';
+      confEl.className = 'green-text';
+    }
+  }
+
+  if (server.dnsbl_listed != null) {
+    const dnsblEl = $('ip-dnsbl-intel');
+    if (dnsblEl) {
+      dnsblEl.textContent = server.dnsbl_listed > 0
+        ? `🔴 ${server.dnsbl_listed}/${server.dnsbl_total} блэклистов`
+        : `🟢 Чисто (${server.dnsbl_total} проверено)`;
+      dnsblEl.className = server.dnsbl_listed > 0 ? 'red-text' : 'green-text';
+    }
+  }
+
+  const torEl = $('ip-tor-intel');
+  if (torEl) {
+    torEl.textContent = server.is_tor ? '🔴 Да' : '🟢 Нет';
+    torEl.className = server.is_tor ? 'red-text' : 'green-text';
+  }
+
+  setText('ip-geo-accuracy-intel', server.geo_accuracy_radius ? `±${server.geo_accuracy_radius} км` : '—');
+}
+
+function fillServerExposure(server) {
+  const exp = server.server_info_exposure;
+
+  // Summary pill in card header
+  const pill = $('server-exposure-pill');
+  if (pill) {
+    pill.textContent = !exp ? '—'
+      : exp.level === 'red' ? '🔴 Риск'
+      : exp.level === 'yellow' ? '🟡 Умеренно'
+      : '🟢 OK';
+  }
+
+  // Sub-stat in summary card
+  const expEl = $('server-exposure');
+  if (expEl) {
+    if (!exp) { expEl.textContent = '—'; }
+    else if (exp.level === 'red') { expEl.textContent = '🔴 Высокий'; expEl.className = 'red-text'; }
+    else if (exp.level === 'yellow') { expEl.textContent = '🟡 Средний'; expEl.className = 'yellow-text'; }
+    else { expEl.textContent = '🟢 Низкий'; expEl.className = 'green-text'; }
+  }
+
+  // ASN type sub-stat in summary card
+  const asnLabelsShort = { datacenter: '🏢 Датацентр', mobile: '📱 Мобильная', residential: '🏠 Резидентная', unknown: '❓' };
+  setText('asn-type-stat', asnLabelsShort[server.asn_type] || server.asn_type || '—');
+
+  // Detailed exposure card
+  if (!exp) return;
+
+  const levelEl = $('sei-level');
+  if (levelEl) {
+    const cls = exp.level === 'red' ? 'red-text' : exp.level === 'yellow' ? 'yellow-text' : 'green-text';
+    const label = exp.level === 'red' ? '🔴 Критический' : exp.level === 'yellow' ? '🟡 Умеренный' : '🟢 Безопасный';
+    levelEl.textContent = label;
+    levelEl.className = cls;
+  }
+
+  const hasPrivateXff = (exp.issues || []).includes('private_ip_in_xff');
+  const seiPrivateEl = $('sei-private-xff');
+  if (seiPrivateEl) {
+    seiPrivateEl.textContent = hasPrivateXff ? '🔴 Да — внутренние адреса в XFF' : '🟢 Нет';
+    seiPrivateEl.className = hasPrivateXff ? 'red-text' : 'green-text';
+  }
+
+  const cipherVisible = (exp.issues || []).includes('tls_cipher_visible');
+  const seiCipherVisEl = $('sei-cipher-visible');
+  if (seiCipherVisEl) {
+    seiCipherVisEl.textContent = cipherVisible ? '🟡 Да' : '🟢 Нет';
+    seiCipherVisEl.className = cipherVisible ? 'yellow-text' : 'green-text';
+  }
+
+  const gradeEl = $('sei-cipher-grade');
+  if (gradeEl) {
+    const grade = server.tls_cipher_grade || '';
+    const gradeMap = { modern: '🟢 Modern', transitional: '🟡 Transitional', legacy: '🔴 Legacy', '': '— (нет данных)' };
+    gradeEl.textContent = gradeMap[grade] ?? grade;
+    gradeEl.className = grade === 'modern' ? 'green-text' : grade === 'legacy' ? 'red-text' : grade === 'transitional' ? 'yellow-text' : '';
+  }
+}
+
 async function getFullClientHints() {
   try {
     if (!navigator.userAgentData?.getHighEntropyValues) return null;
@@ -1228,6 +1363,36 @@ function checkUaChConsistency(ua, hints) {
   return { consistent: issues.length === 0, issues };
 }
 
+const _STAB_KEY = 'myip_fp_stability';
+const MAX_STAB_HISTORY = 10;
+
+function _saveStabilitySnap(snap) {
+  try {
+    const history = JSON.parse(localStorage.getItem(_STAB_KEY) || '[]');
+    history.push(snap);
+    if (history.length > MAX_STAB_HISTORY) history.splice(0, history.length - MAX_STAB_HISTORY);
+    localStorage.setItem(_STAB_KEY, JSON.stringify(history));
+  } catch {}
+}
+
+function _getStabilityHistory() {
+  try { return JSON.parse(localStorage.getItem(_STAB_KEY) || '[]'); } catch { return []; }
+}
+
+function computeStability() {
+  const history = _getStabilityHistory();
+  if (history.length < 2) return null;
+  const fields = ['language', 'timezone', 'screen', 'browser', 'os', 'dpr'];
+  let totalChecks = 0, stableChecks = 0;
+  for (let i = 1; i < history.length; i++) {
+    for (const f of fields) {
+      totalChecks++;
+      if (history[i][f] === history[i - 1][f]) stableChecks++;
+    }
+  }
+  return { pct: Math.round(stableChecks / totalChecks * 100), n: history.length };
+}
+
 function getFingerprintDrift(client) {
   const KEY = 'myip_fp_snap';
   const snap = {
@@ -1248,6 +1413,8 @@ function getFingerprintDrift(client) {
     }
     localStorage.setItem(KEY, JSON.stringify(snap));
   } catch {}
+  // Track multi-visit component stability
+  _saveStabilitySnap({ language: snap.language, timezone: snap.timezone, screen: snap.screen, browser: snap.browser, os: snap.os, dpr: snap.dpr });
   return drift;
 }
 
@@ -1350,6 +1517,8 @@ function buildBrowserComparison(client, server, adblock, gpc, perms) {
     { label: 'JS Heap не раскрыт', done: !client.perf?.memory },
     { label: 'WebGL renderer скрыт', done: !client.webgl?.renderer || client.webgl.renderer === 'unsupported' },
     { label: 'Камера не granted', done: perms?.camera !== 'granted' },
+    { label: 'TLS cipher modern', done: !server.tls_cipher_grade || server.tls_cipher_grade === 'modern' },
+    { label: 'Нет приватных IP в XFF', done: !(server.server_info_exposure?.issues ?? []).includes('private_ip_in_xff') },
   ];
 }
 
@@ -1449,11 +1618,26 @@ function fillPageSecurity(respHeaders) {
   setText('sec-coep', respHeaders.coep || '— не задан');
   setText('sec-xfo', respHeaders.xfo || '— не задан');
   setText('sec-hsts', respHeaders.hsts || '— не задан');
+  setText('sec-pp', respHeaders.permissionsPolicy || '— не задан');
+  setText('sec-xcto', respHeaders.xContentTypeOptions || '— не задан');
+  setText('sec-corp', respHeaders.crossOriginResourcePolicy || '— не задан');
 }
 
 function fillDriftHistory(drift) {
   const box = $('drift-list');
   if (!box) return;
+  // Show multi-visit stability metric
+  const stability = computeStability();
+  const stabRow = $('stability-row');
+  if (stabRow && stability) {
+    stabRow.style.display = 'flex';
+    setText('stab-n', String(stability.n));
+    const stabScore = $('stab-score');
+    if (stabScore) {
+      stabScore.textContent = `${stability.pct}%`;
+      stabScore.className = stability.pct >= 90 ? 'green-text' : stability.pct >= 70 ? 'yellow-text' : 'red-text';
+    }
+  }
   if (!drift) {
     box.innerHTML = '<div class="drift-ok">📌 Первый визит — эталон fingerprint сохранён в localStorage.</div>';
     return;
@@ -1617,6 +1801,9 @@ async function loadAll() {
       xfo: apiRes.headers.get('x-frame-options') || '',
       hsts: apiRes.headers.get('strict-transport-security') || '',
       referrerPolicy: apiRes.headers.get('referrer-policy') || '',
+      permissionsPolicy: apiRes.headers.get('permissions-policy') || '',
+      xContentTypeOptions: apiRes.headers.get('x-content-type-options') || '',
+      crossOriginResourcePolicy: apiRes.headers.get('cross-origin-resource-policy') || '',
     };
     const [apiData, client, perms, quota, swInfo, adblock] = await Promise.all([
       apiRes.json(),
@@ -1640,6 +1827,8 @@ async function loadAll() {
 
     fillSummary(server, client, leaks, score, risk, breakdownItems);
     fillClientDetails(server, client);
+    fillIpIntelligence(server);
+    fillServerExposure(server);
     fillUaCh(client.client_hints, uaConsistency);
     fillPermissions(perms);
     fillStorageState(client.storage_state, quota, swInfo);
