@@ -1597,10 +1597,10 @@ function fillStorageState(state, quota, swInfo) {
 
 function fillNetworkPrivacy(server, client, adblock, cookieTest, gpcJs, respHeaders) {
   setText('np-gpc-server', server.sec_gpc ? `🟢 Отправляет (Sec-GPC: ${server.sec_gpc})` : '🔴 Заголовок не отправлен');
-  setText('np-gpc-js', gpcJs != null ? (gpcJs ? '🟢 Активен' : '🔴 Выключен') : '— Не поддерживается');
+  setText('np-gpc-js', gpcJs != null ? (gpcJs ? '🟢 Активен' : '🔴 Выключен') : '—');
   setText('np-adblock', adblock?.detected === true ? '🟢 Обнаружен' : adblock?.detected === false ? '🔴 Не обнаружен' : '—');
   setText('np-cookie-test', cookieTest ? (cookieTest.first_party_ok ? '✅ First-party cookies: OK' : '❌ First-party cookies: заблокированы') : '—');
-  setText('np-referrer-policy', respHeaders.referrerPolicy || '— (заголовок не задан)');
+  setText('np-referrer-policy', respHeaders.referrerPolicy || '—');
   setText('np-ip-version', server.client_ip_version || '—');
   const c = client.network;
   setText('np-net-type', c ? (c.effective_type || c.type || '—') : '—');
@@ -1610,7 +1610,7 @@ function fillNetworkPrivacy(server, client, adblock, cookieTest, gpcJs, respHead
 }
 
 function fillSecFetch(server) {
-  setText('sf-site', server.sec_fetch_site || '— (не отправлен)');
+  setText('sf-site', server.sec_fetch_site || '—');
   setText('sf-mode', server.sec_fetch_mode || '—');
   setText('sf-dest', server.sec_fetch_dest || '—');
   setText('sf-user', server.sec_fetch_user || '—');
@@ -1621,14 +1621,14 @@ function fillSecFetch(server) {
 }
 
 function fillPageSecurity(respHeaders) {
-  setText('sec-csp', respHeaders.csp || '— не задан');
-  setText('sec-coop', respHeaders.coop || '— не задан');
-  setText('sec-coep', respHeaders.coep || '— не задан');
-  setText('sec-xfo', respHeaders.xfo || '— не задан');
-  setText('sec-hsts', respHeaders.hsts || '— не задан');
-  setText('sec-pp', respHeaders.permissionsPolicy || '— не задан');
-  setText('sec-xcto', respHeaders.xContentTypeOptions || '— не задан');
-  setText('sec-corp', respHeaders.crossOriginResourcePolicy || '— не задан');
+  setText('sec-csp', respHeaders.csp || '—');
+  setText('sec-coop', respHeaders.coop || '—');
+  setText('sec-coep', respHeaders.coep || '—');
+  setText('sec-xfo', respHeaders.xfo || '—');
+  setText('sec-hsts', respHeaders.hsts || '—');
+  setText('sec-pp', respHeaders.permissionsPolicy || '—');
+  setText('sec-xcto', respHeaders.xContentTypeOptions || '—');
+  setText('sec-corp', respHeaders.crossOriginResourcePolicy || '—');
 }
 
 function fillDriftHistory(drift) {
