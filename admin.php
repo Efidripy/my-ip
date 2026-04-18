@@ -13,7 +13,8 @@ $todayCount   = (int)$pdo->query("SELECT COUNT(*) FROM visits WHERE date(created
 $highRisk     = (int)$pdo->query("SELECT COUNT(*) FROM visits WHERE risk_level = 'red'")->fetchColumn();
 $avgScore     = (int)round((float)$pdo->query("SELECT COALESCE(AVG(privacy_score),0) FROM visits WHERE privacy_score IS NOT NULL")->fetchColumn());
 
-// Chart: visits per day for last 14 days
+// Chart: visits per day for last 14 days — define $chartDays before using it
+$chartDays = 14;
 $chartRows = $pdo->query(
     "SELECT date(created_at) as day, COUNT(*) as cnt,
             COALESCE(CAST(AVG(CASE WHEN privacy_score IS NOT NULL THEN privacy_score END) AS INTEGER),0) as avg_score
@@ -21,7 +22,6 @@ $chartRows = $pdo->query(
      GROUP BY day ORDER BY day ASC"
 )->fetchAll();
 
-$chartDays = 14;
 $chartByDay = [];
 for ($i = $chartDays - 1; $i >= 0; $i--) {
     $d = date('Y-m-d', strtotime("-{$i} days"));
@@ -38,6 +38,21 @@ $chartJson = json_encode($chartData);
 
 $rows = $pdo->query('SELECT * FROM visits ORDER BY created_at DESC LIMIT 200')->fetchAll();
 $tok  = h((string)($_GET['token'] ?? ''));
+
+// Compute a simple spoof score for each row
+function spoof_score(array $row): int {
+    $s = 0;
+    if (($row['vpn_hosting_risk'] ?? '') === 'high')   $s += 2;
+    elseif (($row['vpn_hosting_risk'] ?? '') === 'medium') $s += 1;
+    if (!empty($row['is_tor'])) $s += 2;
+    // Check worker realm mismatch flag stored in client_json
+    $cj = $row['client_json'] ?? '';
+    if ($cj) {
+        $decoded = json_decode($cj, true);
+        if (is_array($decoded) && !empty($decoded['worker_consistency']['spoof_suspected'])) $s += 3;
+    }
+    return $s;
+}
 ?><!doctype html>
 <html lang="ru">
 <head>
@@ -127,16 +142,31 @@ table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{padding:11px 14
   <div class="table-card">
     <div class="table-head">
       <h2>Последние визиты <span style="color:var(--muted);font-size:13px;font-weight:400">(<?= count($rows) ?> из <?= $total ?>)</span></h2>
-      <div class="tbl-actions">
+      <div class="tbl-actions" style="align-items:center;gap:10px">
+        <label style="font-size:12px;color:var(--muted)">Risk:
+          <select id="filter-risk" style="margin-left:5px;padding:4px 8px;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--text);font-size:12px">
+            <option value="">все</option>
+            <option value="red">🔴 red</option>
+            <option value="yellow">🟡 yellow</option>
+            <option value="green">🟢 green</option>
+          </select>
+        </label>
+        <label style="font-size:12px;color:var(--muted)">Spoof:
+          <select id="filter-spoof" style="margin-left:5px;padding:4px 8px;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--text);font-size:12px">
+            <option value="">все</option>
+            <option value="high">🚨 high</option>
+            <option value="med">⚠️ medium</option>
+          </select>
+        </label>
         <a href="export.php?token=<?= $tok ?>&format=json">JSON</a>
         <a href="export.php?token=<?= $tok ?>&format=csv">CSV</a>
       </div>
     </div>
     <div class="tbl-scroll">
-    <table>
+    <table id="visits-table">
       <thead>
         <tr>
-          <th>#</th><th>Время</th><th>IP</th><th>Гео</th><th>Org / ASN</th><th>Risk</th><th>Score</th><th>Hash</th><th></th>
+          <th>#</th><th>Время</th><th>IP</th><th>Гео</th><th>Org / ASN</th><th>Risk</th><th>Score</th><th>Spoof</th><th>Hash</th><th></th>
         </tr>
       </thead>
       <tbody>
@@ -147,8 +177,11 @@ table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{padding:11px 14
     $vpn = (string)($row['vpn_hosting_risk'] ?: $row['risk_level'] ?: '—');
     $scoreVal = $row['privacy_score'] !== null ? (int)$row['privacy_score'] : null;
     $scoreColor = $scoreVal === null ? '' : ($scoreVal >= 75 ? 'color:var(--green)' : ($scoreVal >= 45 ? 'color:var(--yellow)' : 'color:var(--red)'));
+    $spoofScore = spoof_score($row);
+    $spoofLabel = $spoofScore >= 4 ? '🚨' : ($spoofScore >= 2 ? '⚠️' : '');
+    $spoofTitle = "score:{$spoofScore}" . ($row['is_tor'] ? ' tor' : '') . (($row['vpn_hosting_risk'] ?? '') ? ' vpn:' . $row['vpn_hosting_risk'] : '');
 ?>
-        <tr>
+        <tr data-risk="<?= h((string)($row['risk_level'] ?? '')) ?>" data-spoof="<?= $spoofScore ?>">
           <td style="color:var(--muted);font-size:12px"><?= (int)$row['id'] ?></td>
           <td class="mono" style="font-size:12px;color:var(--muted);white-space:nowrap"><?= h(substr((string)$row['created_at'], 0, 19)) ?></td>
           <td class="mono"><?= h((string)$row['ip']) ?><?php if ($row['reverse_dns']): ?><br><small style="color:var(--muted);font-size:11px"><?= h((string)$row['reverse_dns']) ?></small><?php endif; ?></td>
@@ -156,6 +189,7 @@ table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{padding:11px 14
           <td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= h((string)$row['as_org']) ?>"><?= h(trim(($row['asn'] ? 'AS' . $row['asn'] . ' ' : '') . ($row['as_org'] ?: ''))) ?: '—' ?></td>
           <td><span class="risk-badge <?= $riskClass ?>"><?= h($vpn) ?></span></td>
           <td><span class="score-chip" style="<?= $scoreColor ?>"><?= $scoreVal !== null ? $scoreVal : '—' ?></span></td>
+          <td style="font-size:14px" title="<?= h($spoofTitle) ?>"><?= $spoofLabel ?: '<span style="color:var(--muted);font-size:11px">—</span>' ?></td>
           <td class="mono" style="font-size:11px;color:var(--muted)"><?= $row['client_hash'] ? h(substr((string)$row['client_hash'], 0, 12)) . '…' : '—' ?></td>
           <td><a href="visit.php?id=<?= (int)$row['id'] ?>&token=<?= $tok ?>" class="open-link">open</a></td>
         </tr>
@@ -216,6 +250,27 @@ table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{padding:11px 14
     ctx.textAlign = 'center';
     ctx.fillText(d.day, x + bW / 2, H - pB + 16);
   });
+})();
+
+// Table filter
+(function() {
+  const riskSel  = document.getElementById('filter-risk');
+  const spoofSel = document.getElementById('filter-spoof');
+  function applyFilter() {
+    const riskVal  = riskSel.value;
+    const spoofVal = spoofSel.value;
+    document.querySelectorAll('#visits-table tbody tr').forEach(tr => {
+      const risk  = tr.dataset.risk  || '';
+      const spoof = parseInt(tr.dataset.spoof || '0', 10);
+      let show = true;
+      if (riskVal && risk !== riskVal) show = false;
+      if (spoofVal === 'high' && spoof < 4) show = false;
+      if (spoofVal === 'med'  && spoof < 2) show = false;
+      tr.style.display = show ? '' : 'none';
+    });
+  }
+  riskSel.addEventListener('change', applyFilter);
+  spoofSel.addEventListener('change', applyFilter);
 })();
 </script>
 </body>

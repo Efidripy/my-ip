@@ -66,9 +66,29 @@ function db(): PDO {
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_visits_ip ON visits(ip);');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_visits_hash ON visits(client_hash);');
 
-    // Migrations for existing databases
-    try { $pdo->exec('ALTER TABLE visits ADD COLUMN sec_ch_ua TEXT;'); } catch (Throwable) {}
-    try { $pdo->exec('ALTER TABLE visits ADD COLUMN vpn_reason TEXT;'); } catch (Throwable) {}
+    // Migrations for existing databases — each ALTER TABLE is silently skipped if column already exists
+    $migrations = [
+        'ALTER TABLE visits ADD COLUMN x_real_ip TEXT',
+        'ALTER TABLE visits ADD COLUMN referer_present INTEGER DEFAULT 0',
+        'ALTER TABLE visits ADD COLUMN origin_present INTEGER DEFAULT 0',
+        'ALTER TABLE visits ADD COLUMN sec_ch_ua_present INTEGER DEFAULT 0',
+        'ALTER TABLE visits ADD COLUMN sec_ch_ua TEXT',
+        'ALTER TABLE visits ADD COLUMN geo_region TEXT',
+        'ALTER TABLE visits ADD COLUMN geo_timezone TEXT',
+        'ALTER TABLE visits ADD COLUMN asn TEXT',
+        'ALTER TABLE visits ADD COLUMN as_org TEXT',
+        'ALTER TABLE visits ADD COLUMN vpn_hosting_risk TEXT',
+        'ALTER TABLE visits ADD COLUMN vpn_hosting_reason TEXT',
+        'ALTER TABLE visits ADD COLUMN is_tor INTEGER DEFAULT 0',
+        'ALTER TABLE visits ADD COLUMN client_json TEXT',
+        'ALTER TABLE visits ADD COLUMN client_hash TEXT',
+        'ALTER TABLE visits ADD COLUMN privacy_score INTEGER',
+        'ALTER TABLE visits ADD COLUMN risk_level TEXT',
+        'ALTER TABLE visits ADD COLUMN vpn_reason TEXT',
+    ];
+    foreach ($migrations as $sql) {
+        try { $pdo->exec($sql); } catch (Throwable) {}
+    }
 
     return $pdo;
 }
