@@ -4,9 +4,16 @@ KLEVA My-IP PRO
   БЫСТРАЯ УСТАНОВКА (Ubuntu / Debian)
 ════════════════════════════════════════════
 
-  sudo bash install.sh
+1. Скачать проект с GitHub:
 
-Скрипт сам спросит путь установки, URL-префикс, сокет PHP-FPM,
+   git clone https://github.com/Efidripy/my-ip.git
+   cd my-ip
+
+2. Запустить интерактивный установщик:
+
+   sudo bash install.sh
+
+Скрипт спросит путь установки, URL-префикс, сокет PHP-FPM,
 установит зависимости, настроит nginx, сгенерирует токен и
 предложит скачать базы GeoIP и список Tor-нод.
 
@@ -30,10 +37,11 @@ KLEVA My-IP PRO
 ════════════════════════════════════════════
 
 1) sudo apt update && sudo apt install -y \
-       php-fpm php-cli php-sqlite3 sqlite3 mmdb-bin unzip curl
+       php-fpm php-cli php-sqlite3 sqlite3 mmdb-bin unzip curl git
 
-2) Скопировать проект:
-   sudo cp -r . /var/www/my-ip
+2) Скачать проект с GitHub и скопировать в нужный каталог:
+   git clone https://github.com/Efidripy/my-ip.git
+   sudo cp -r my-ip /var/www/my-ip
 
 3) Создать директорию данных:
    sudo mkdir -p /var/www/my-ip/data
