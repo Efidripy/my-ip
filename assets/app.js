@@ -4,7 +4,15 @@ let currentVisitId = null;
 
 function txt(v) { return (v === undefined || v === null || v === '') ? '—' : String(v); }
 function setText(id, value) { const el = $(id); if (el) el.textContent = txt(value); }
-function setHTML(id, value) { const el = $(id); if (el) el.innerHTML = value; }
+function renderLevelText(id, cssClass, label) {
+  const el = $(id);
+  if (!el) return;
+  el.replaceChildren();
+  const span = document.createElement('span');
+  span.className = cssClass;
+  span.textContent = label;
+  el.appendChild(span);
+}
 
 function detectBrowser(ua='') {
   const s = ua.toLowerCase();
@@ -151,7 +159,12 @@ async function collectClientSignals() {
   return client;
 }
 
-function badge(level) { return `<span class="badge ${level}">${level === 'red' ? 'красный' : level === 'yellow' ? 'жёлтый' : 'зелёный'}</span>`; }
+function badgeNode(level) {
+  const span = document.createElement('span');
+  span.className = `badge ${level}`;
+  span.textContent = level === 'red' ? 'красный' : level === 'yellow' ? 'жёлтый' : 'зелёный';
+  return span;
+}
 function textClass(level) { return level === 'red' ? 'red-text' : level === 'yellow' ? 'yellow-text' : 'green-text'; }
 
 function buildLeakItems(server, client) {
@@ -200,9 +213,9 @@ function fillSummary(server, client, leaks, score, risk) {
   setText('geo-city', [server.city, server.region].filter(Boolean).join(', ') || '—');
   setText('geo-asn', [server.asn ? 'AS' + server.asn : '', server.as_org].filter(Boolean).join(' • ') || '—');
   setText('privacy-score', `${score}/100`);
-  setHTML('risk-level', `<span class="${textClass(risk)}">${risk === 'red' ? 'high' : risk === 'yellow' ? 'medium' : 'low'}</span>`);
-  setHTML('vpn-risk', `<span class="${textClass(server.vpn_hosting_risk === 'high' ? 'red' : server.vpn_hosting_risk === 'medium' ? 'yellow' : 'green')}">${txt(server.vpn_hosting_risk)}</span>`);
-  setHTML('webrtc-status', `<span class="${textClass(client.webrtc.public.length ? 'red' : (client.webrtc.local.length || client.webrtc.mdns.length) ? 'yellow' : 'green')}">${client.webrtc.public.length ? 'public leak' : (client.webrtc.local.length || client.webrtc.mdns.length) ? 'local leak' : 'safe'}</span>`);
+  renderLevelText('risk-level', textClass(risk), risk === 'red' ? 'high' : risk === 'yellow' ? 'medium' : 'low');
+  renderLevelText('vpn-risk', textClass(server.vpn_hosting_risk === 'high' ? 'red' : server.vpn_hosting_risk === 'medium' ? 'yellow' : 'green'), txt(server.vpn_hosting_risk));
+  renderLevelText('webrtc-status', textClass(client.webrtc.public.length ? 'red' : (client.webrtc.local.length || client.webrtc.mdns.length) ? 'yellow' : 'green'), client.webrtc.public.length ? 'public leak' : (client.webrtc.local.length || client.webrtc.mdns.length) ? 'local leak' : 'safe');
   $('scorebar-fill').style.width = `${score}%`;
   $('scorebar-fill').style.background = risk === 'red' ? 'linear-gradient(90deg,#ff6b6b,#ffd166)' : risk === 'yellow' ? 'linear-gradient(90deg,#ffd166,#68aaff)' : 'linear-gradient(90deg,#7cf29a,#68ffd5)';
   setText('score-explain', explainScore(score));
@@ -215,13 +228,34 @@ function fillSummary(server, client, leaks, score, risk) {
   setText('updated-at', new Date().toLocaleTimeString());
 
   const box = $('leak-list');
-  box.innerHTML = leaks.map(item => `
-    <article class="leak-item">
-      <div class="leak-top"><strong>${item.title}</strong>${badge(item.level)}</div>
-      <div class="leak-value">${txt(item.value)}</div>
-      <div class="muted">${item.why}</div>
-    </article>
-  `).join('');
+  if (box) {
+    box.replaceChildren();
+    for (const item of leaks) {
+      const article = document.createElement('article');
+      article.className = 'leak-item';
+
+      const top = document.createElement('div');
+      top.className = 'leak-top';
+
+      const title = document.createElement('strong');
+      title.textContent = txt(item.title);
+      top.appendChild(title);
+      top.appendChild(badgeNode(item.level));
+
+      const value = document.createElement('div');
+      value.className = 'leak-value';
+      value.textContent = txt(item.value);
+
+      const why = document.createElement('div');
+      why.className = 'muted';
+      why.textContent = txt(item.why);
+
+      article.appendChild(top);
+      article.appendChild(value);
+      article.appendChild(why);
+      box.appendChild(article);
+    }
+  }
 }
 
 function fillClientDetails(server, client) {

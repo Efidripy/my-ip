@@ -75,5 +75,7 @@ function cleanup_old_rows(): void {
     $count = (int)$pdo->query('SELECT COUNT(*) FROM visits')->fetchColumn();
     if ($count <= $max) return;
     $toDelete = $count - $max;
-    $pdo->exec('DELETE FROM visits WHERE id IN (SELECT id FROM visits ORDER BY created_at ASC LIMIT ' . $toDelete . ')');
+    $stmt = $pdo->prepare('DELETE FROM visits WHERE id IN (SELECT id FROM visits ORDER BY created_at ASC LIMIT :limit)');
+    $stmt->bindValue(':limit', $toDelete, PDO::PARAM_INT);
+    $stmt->execute();
 }

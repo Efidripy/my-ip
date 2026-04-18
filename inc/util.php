@@ -59,7 +59,7 @@ function detect_risk_level(int $score): string {
 function is_admin_authorized(): bool {
     $cfg = app_config();
     $token = $cfg['admin_token'] ?? '';
-    if ($token === '' || $token === 'CHANGE_ME_STRONG_TOKEN') {
+    if ($token === '') {
         return false;
     }
     $provided = $_GET['token'] ?? $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? '';
@@ -69,7 +69,7 @@ function is_admin_authorized(): bool {
 function require_admin(): void {
     if (!is_admin_authorized()) {
         http_response_code(403);
-        echo '<!doctype html><meta charset="utf-8"><title>403</title><body style="font-family:sans-serif;background:#0b1220;color:#fff;padding:32px">403 — admin token required.<br>Открой страницу как <code>?token=YOUR_TOKEN</code> после замены токена в <code>inc/config.php</code>.</body>';
+        echo '<!doctype html><meta charset="utf-8"><title>403</title><body style="font-family:sans-serif;background:#0b1220;color:#fff;padding:32px">403 — admin token required.<br>Установи <code>MY_IP_ADMIN_TOKEN</code> (или задай <code>admin_token</code> в <code>inc/config.php</code>) и открой страницу как <code>?token=YOUR_TOKEN</code>.</body>';
         exit;
     }
 }
