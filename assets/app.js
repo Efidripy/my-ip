@@ -310,11 +310,12 @@ async function detectWebRTC() {
       pc.createDataChannel('x');
       pc.onicecandidate = (e) => {
         if (!e.candidate || !e.candidate.candidate) return;
-        const cand = e.candidate.candidate;
-        const m = cand.match(/([0-9]{1,3}(?:\.[0-9]{1,3}){3}|[a-f0-9:]+|[a-z0-9-]+\.local)\s+(\d+)/i);
-        if (!m) return;
-        const v = m[1];
-        const port = parseInt(m[2], 10);
+        // SDP candidate format: candidate:<foundation> <component> <transport> <priority> <address> <port> typ ...
+        const parts = e.candidate.candidate.split(' ');
+        if (parts.length < 6) return;
+        const v = parts[4];
+        const port = parseInt(parts[5], 10);
+        if (!v || isNaN(port)) return;
         if (!isNaN(port) && PROXY_PORTS.has(port)) proxyPorts.add(port);
         if (v.endsWith('.local')) mdns.add(v); else ips.add(v);
       };
