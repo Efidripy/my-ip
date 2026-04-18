@@ -72,6 +72,10 @@ KLEVA My-IP PRO
   Содержимое snippets (пример для prefix /my-ip):
 
   # my-ip-location.conf
+  # port_in_redirect off prevents nginx from adding the listen port
+  # (e.g. :7445) to redirect URLs when running behind a reverse proxy.
+  port_in_redirect off;
+
   location = /my-ip {
       return 301 /my-ip/;
   }

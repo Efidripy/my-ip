@@ -147,6 +147,10 @@ else
 
     cat > "$SNIPPET_LOC" <<NGINX_LOC
 # KLEVA My-IP PRO — sub-path location
+# Needed when nginx listens on a non-standard port behind a reverse proxy:
+# prevents nginx from appending the real listen port to redirect URLs.
+port_in_redirect off;
+
 location = /${STRIPPED} {
     return 301 /${STRIPPED}/;
 }
