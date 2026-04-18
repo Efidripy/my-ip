@@ -52,6 +52,7 @@ function geo_lookup(string $ip): array {
         'tor' => false,
         'vpn_hosting_risk' => 'unknown',
         'vpn_hosting_reason' => 'Нет локальных баз или недостаточно данных.',
+        'accuracy_radius' => null,
     ];
 
     $safeIp = normalize_ip($ip);
@@ -68,6 +69,7 @@ function geo_lookup(string $ip): array {
     $out['timezone'] = mmdb_lookup_value($cityDb, $safeIp, ['location', 'time_zone']) ?? '';
     $out['asn'] = mmdb_lookup_value($asnDb, $safeIp, ['autonomous_system_number']) ?? '';
     $out['org'] = mmdb_lookup_value($asnDb, $safeIp, ['autonomous_system_organization']) ?? '';
+    $out['accuracy_radius'] = mmdb_lookup_value($cityDb, $safeIp, ['location', 'accuracy_radius']);
 
     $torFile = $cfg['tor_exit_nodes_file'];
     if (is_file($torFile)) {

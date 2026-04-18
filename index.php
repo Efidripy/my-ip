@@ -135,6 +135,9 @@
             <div class="kv"><span>ASN org</span><strong id="kv-org">—</strong></div>
             <div class="kv"><span>Tor</span><strong id="kv-tor">—</strong></div>
             <div class="kv"><span>DNSBL</span><strong id="kv-dnsbl">—</strong></div>
+            <div class="kv"><span>Accept-Encoding</span><strong id="kv-accept-encoding">—</strong></div>
+            <div class="kv"><span>Bogon в XFF</span><strong id="kv-bogon-xff">—</strong></div>
+            <div class="kv"><span>Точность геолокации</span><strong id="kv-geo-accuracy">—</strong></div>
           </div>
         </section>
       </div>
@@ -174,6 +177,19 @@
             <div class="kv"><span>System locale</span><strong id="fp-locale">—</strong></div>
             <div class="kv"><span>Fonts found</span><strong id="fp-fonts-count">—</strong></div>
             <div class="kv"><span>UA brands</span><strong id="fp-ua-brands">—</strong></div>
+            <div class="kv"><span>Outer/Inner diff</span><strong id="fp-outer-diff">—</strong></div>
+            <div class="kv"><span>Screen orientation</span><strong id="fp-orientation">—</strong></div>
+            <div class="kv"><span>PDF viewer</span><strong id="fp-pdf-viewer">—</strong></div>
+            <div class="kv"><span>OffscreenCanvas</span><strong id="fp-offscreen-canvas">—</strong></div>
+            <div class="kv"><span>Max touch points</span><strong id="fp-max-touch">—</strong></div>
+            <div class="kv"><span>DNT (JS)</span><strong id="fp-dnt-js">—</strong></div>
+            <div class="kv"><span>CSS media</span><strong id="fp-css-media">—</strong></div>
+            <div class="kv"><span>JS Heap</span><strong id="fp-perf-memory">—</strong></div>
+            <div class="kv"><span>Clock resolution</span><strong id="fp-clock-res">—</strong></div>
+            <div class="kv"><span>TZ offset</span><strong id="fp-tz-offset">—</strong></div>
+            <div class="kv"><span>Media devices</span><strong id="fp-media-devices">—</strong></div>
+            <div class="kv"><span>AudioContext</span><strong id="fp-audio-ctx">—</strong></div>
+            <div class="kv"><span>Browser APIs</span><strong id="fp-browser-apis">—</strong></div>
           </div>
         </section>
 

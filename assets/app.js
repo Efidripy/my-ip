@@ -185,6 +185,118 @@ function getUaBrands() {
   } catch { return []; }
 }
 
+function getHeadlessSignals() {
+  return {
+    outer_inner_width_diff: window.outerWidth - window.innerWidth,
+    outer_inner_height_diff: window.outerHeight - window.innerHeight,
+    pdf_viewer_enabled: !!navigator.pdfViewerEnabled,
+    java_enabled: typeof navigator.javaEnabled === 'function' ? navigator.javaEnabled() : false,
+    orientation_type: screen.orientation?.type || null,
+    avail_width_diff: screen.width - screen.availWidth,
+    avail_height_diff: screen.height - screen.availHeight,
+    offscreen_canvas: typeof OffscreenCanvas !== 'undefined',
+    max_touch_points: navigator.maxTouchPoints || 0,
+  };
+}
+
+function getCssMediaFeatures() {
+  const mq = (q) => { try { return window.matchMedia(q).matches; } catch { return null; } };
+  return {
+    prefers_dark: mq('(prefers-color-scheme: dark)'),
+    prefers_light: mq('(prefers-color-scheme: light)'),
+    prefers_reduced_motion: mq('(prefers-reduced-motion: reduce)'),
+    forced_colors: mq('(forced-colors: active)'),
+    pointer_fine: mq('(pointer: fine)'),
+    pointer_coarse: mq('(pointer: coarse)'),
+    any_pointer_coarse: mq('(any-pointer: coarse)'),
+    display_standalone: mq('(display-mode: standalone)'),
+    hdr: mq('(dynamic-range: high)'),
+    color_gamut_p3: mq('(color-gamut: p3)'),
+  };
+}
+
+async function getMediaDevicesCount() {
+  try {
+    if (!navigator.mediaDevices?.enumerateDevices) return null;
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    let cameras = 0, microphones = 0, speakers = 0;
+    for (const d of devices) {
+      if (d.kind === 'videoinput') cameras++;
+      else if (d.kind === 'audioinput') microphones++;
+      else if (d.kind === 'audiooutput') speakers++;
+    }
+    return { cameras, microphones, speakers, total: devices.length };
+  } catch { return null; }
+}
+
+async function getAudioContextDetails() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    const ctx = new AudioCtx();
+    const result = {
+      sample_rate: ctx.sampleRate,
+      state: ctx.state,
+      base_latency: typeof ctx.baseLatency === 'number' ? Math.round(ctx.baseLatency * 10000) / 10000 : null,
+      output_latency: typeof ctx.outputLatency === 'number' ? Math.round(ctx.outputLatency * 10000) / 10000 : null,
+    };
+    try { await ctx.close(); } catch {}
+    return result;
+  } catch { return null; }
+}
+
+function getPerformanceDetails() {
+  const result = {
+    memory: null,
+    clock_resolution_ms: null,
+    tz_offset: new Date().getTimezoneOffset(),
+  };
+  try {
+    const mem = performance.memory;
+    if (mem) {
+      result.memory = {
+        used_mb: Math.round(mem.usedJSHeapSize / 1048576 * 10) / 10,
+        total_mb: Math.round(mem.totalJSHeapSize / 1048576 * 10) / 10,
+        limit_mb: Math.round(mem.jsHeapSizeLimit / 1048576 * 10) / 10,
+      };
+    }
+  } catch {}
+  try {
+    let minDiff = Infinity;
+    let prev = performance.now();
+    for (let i = 0; i < 50; i++) {
+      const now = performance.now();
+      const diff = now - prev;
+      if (diff > 0 && diff < minDiff) minDiff = diff;
+      prev = now;
+    }
+    result.clock_resolution_ms = minDiff === Infinity ? null : Math.round(minDiff * 10000) / 10000;
+  } catch {}
+  return result;
+}
+
+function getBrowserApiAvailability() {
+  return {
+    share: !!navigator.share,
+    xr: !!navigator.xr,
+    credentials: !!navigator.credentials,
+    clipboard: !!navigator.clipboard,
+    vibrate: !!navigator.vibrate,
+    idb: !!window.indexedDB,
+    websql: typeof window.openDatabase === 'function',
+    trusted_types: !!window.trustedTypes,
+    random_uuid: !!(crypto?.randomUUID),
+    cross_origin_isolated: !!self.crossOriginIsolated,
+    device_motion: 'DeviceMotionEvent' in window,
+    device_orientation: 'DeviceOrientationEvent' in window,
+    web_codecs: !!(window.VideoDecoder && window.VideoEncoder),
+    sensors: !!(window.Accelerometer || window.Gyroscope),
+    service_worker: !!navigator.serviceWorker,
+    web_locks: !!navigator.locks,
+    payment_request: !!window.PaymentRequest,
+  };
+}
+
 async function detectWebRTC() {
   const result = { supported: false, local: [], public: [], mdns: [], proxy_ports: [] };
   const RTCPeer = window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
@@ -229,11 +341,18 @@ async function collectClientSignals() {
   const network = getNetworkInfo();
   const system_locale = getSystemLocale();
   const ua_brands = getUaBrands();
-  const [audio, webrtc, battery, incognito] = await Promise.all([
+  const headless = getHeadlessSignals();
+  const css_media = getCssMediaFeatures();
+  const perf = getPerformanceDetails();
+  const browser_apis = getBrowserApiAvailability();
+  const dnt_js = navigator.doNotTrack ?? null;
+  const [audio, webrtc, battery, incognito, media_devices, audio_ctx_details] = await Promise.all([
     audioHash(),
     detectWebRTC(),
     getBatteryInfo(),
     detectIncognito(),
+    getMediaDevicesCount(),
+    getAudioContextDetails(),
   ]);
 
   const client = {
@@ -265,6 +384,13 @@ async function collectClientSignals() {
     ua_brands,
     incognito,
     webrtc,
+    headless,
+    css_media,
+    perf,
+    browser_apis,
+    media_devices,
+    audio_ctx_details,
+    dnt_js,
   };
   const fpSource = JSON.stringify([
     client.browser, client.os, client.device, client.engine,
@@ -524,6 +650,98 @@ function buildLeakItems(server, client) {
     why: 'ASN или rDNS похожи на датацентр, VPS, VPN или прокси.',
     fix: 'Большинство коммерческих VPN имеют такие ASN. Для скрытия факта VPN нужны «чистые» резидентные прокси.',
   });
+
+  // Headless browser detection
+  const hdiff = client.headless?.outer_inner_height_diff ?? null;
+  const wdiff = client.headless?.outer_inner_width_diff ?? null;
+  if (hdiff !== null && hdiff === 0 && wdiff === 0) {
+    leaks.push({
+      title: 'Headless browser',
+      value: `outer == inner: ширина ${wdiff}px, высота ${hdiff}px`,
+      level: 'red',
+      why: 'В реальном браузере outerHeight превышает innerHeight на размер тулбара (≥40px). Нулевая разница — признак Puppeteer/Playwright/Selenium.',
+      fix: 'Это не утечка данных, но сайты используют этот сигнал для блокировки ботов и автоматизации.',
+    });
+  }
+
+  // UA spoof: desktop UA but touch screen
+  const maxTouch = client.headless?.max_touch_points ?? 0;
+  if (maxTouch > 0 && client.device === 'Десктоп') {
+    leaks.push({
+      title: 'UA spoof (touch + desktop)',
+      value: `Touch points: ${maxTouch}, UA device: ${client.device}`,
+      level: 'red',
+      why: 'User-Agent заявляет десктопное устройство, но устройство поддерживает тач. Типичный признак подмены UA на мобиле или планшете.',
+      fix: 'Убедись что UA соответствует реальному устройству. Подмена легко детектируется по несоответствию с touchPoints.',
+    });
+  }
+
+  // DNT header mismatch
+  if (client.dnt_js === '1' && !server.dnt) {
+    leaks.push({
+      title: 'DNT mismatch',
+      value: 'JS: navigator.doNotTrack=1, Сервер: заголовок отсутствует',
+      level: 'yellow',
+      why: 'Браузер декларирует DNT=1 через JS API, но сервер не получил этот заголовок. Признак прокси или расширения, модифицирующего заголовки.',
+      fix: 'Это говорит о несоответствии между браузером и промежуточным слоем. Возможно, прокси удаляет или не прокидывает заголовок DNT.',
+    });
+  }
+
+  // Bogon IP in X-Forwarded-For
+  if (server.bogon_in_xff) {
+    leaks.push({
+      title: 'Bogon IP в X-Forwarded-For',
+      value: server.x_forwarded_for,
+      level: 'yellow',
+      why: 'В цепочке X-Forwarded-For найден приватный/зарезервированный IP (RFC 1918, CGN, loopback). Признак некорректно настроенного прокси.',
+      fix: 'Прокси не должен добавлять в XFF внутренние адреса. Это раскрывает топологию внутренней сети.',
+    });
+  }
+
+  // Accept-Encoding: missing brotli = bot/script/stripping proxy
+  if (server.accept_encoding && !server.accept_encoding.includes('br')) {
+    leaks.push({
+      title: 'Accept-Encoding: нет brotli',
+      value: server.accept_encoding,
+      level: 'yellow',
+      why: 'Все современные браузеры поддерживают brotli (br). Его отсутствие говорит о curl/скрипте или прокси, удаляющем заголовки.',
+      fix: 'Если ты в браузере — возможно, расширение или прокси модифицирует заголовки запроса.',
+    });
+  }
+
+  // Weak geolocation accuracy (good for privacy)
+  const accRadius = server.geo_accuracy_radius ? parseInt(String(server.geo_accuracy_radius), 10) : null;
+  if (accRadius !== null && !isNaN(accRadius) && accRadius > 200) {
+    leaks.push({
+      title: 'Слабая геолокация по IP',
+      value: `Точность: ±${accRadius} км`,
+      level: 'green',
+      why: 'Большой радиус точности геолокации означает, что точное местоположение по IP трудно определить. Это хороший знак для приватности.',
+      fix: 'Это не требует действий — широкий радиус точности защищает геолокацию.',
+    });
+  }
+
+  // PWA / standalone mode
+  if (client.css_media?.display_standalone) {
+    leaks.push({
+      title: 'PWA standalone mode',
+      value: 'display-mode: standalone',
+      level: 'yellow',
+      why: 'Страница запущена в режиме PWA-приложения. Раскрывает способ использования браузера.',
+      fix: 'Это информационный сигнал о режиме работы браузера.',
+    });
+  }
+
+  // Forced colors (accessibility mode)
+  if (client.css_media?.forced_colors) {
+    leaks.push({
+      title: 'Forced colors (high contrast)',
+      value: 'forced-colors: active',
+      level: 'yellow',
+      why: 'Включён режим высокого контраста Windows или системные настройки доступности. Редкая комбинация, усиливающая fingerprint.',
+      fix: 'Режим высокого контраста можно отключить в настройках ОС, но это влияет на удобство использования.',
+    });
+  }
 
   return leaks;
 }
@@ -798,6 +1016,9 @@ function fillClientDetails(server, client) {
   setText('kv-org', server.as_org || '—');
   setText('kv-tor', server.is_tor ? 'yes' : 'no');
   setText('kv-dnsbl', server.dnsbl_listed != null ? `${server.dnsbl_listed}/${server.dnsbl_total} блэклистов` : '—');
+  setText('kv-accept-encoding', server.accept_encoding || '—');
+  setText('kv-bogon-xff', server.bogon_in_xff ? 'yes' : 'no');
+  setText('kv-geo-accuracy', server.geo_accuracy_radius ? `±${server.geo_accuracy_radius} km` : '—');
 
   setText('fp-browser', client.browser);
   setText('fp-os', client.os);
@@ -828,6 +1049,60 @@ function fillClientDetails(server, client) {
   setText('fp-locale', client.system_locale ? `${client.system_locale.number} / ${client.system_locale.collator}` : '—');
   setText('fp-fonts-count', client.fonts_count != null ? String(client.fonts_count) : '—');
   setText('fp-ua-brands', (client.ua_brands || []).join(', ') || '—');
+
+  // Headless / automation signals
+  const hl = client.headless || {};
+  setText('fp-outer-diff', hl.outer_inner_width_diff != null ? `W:${hl.outer_inner_width_diff}px H:${hl.outer_inner_height_diff}px` : '—');
+  setText('fp-orientation', hl.orientation_type || '—');
+  setText('fp-pdf-viewer', hl.pdf_viewer_enabled ? 'yes' : 'no');
+  setText('fp-offscreen-canvas', hl.offscreen_canvas ? 'yes' : 'no');
+  setText('fp-max-touch', String(hl.max_touch_points ?? '—'));
+  setText('fp-dnt-js', client.dnt_js != null ? String(client.dnt_js) : '—');
+
+  // CSS media features
+  const cm = client.css_media || {};
+  const mediaStr = [
+    cm.prefers_dark ? 'dark' : (cm.prefers_light ? 'light' : 'no-pref'),
+    cm.prefers_reduced_motion ? 'reduced-motion' : null,
+    cm.forced_colors ? 'forced-colors' : null,
+    cm.pointer_fine ? 'pointer:fine' : (cm.pointer_coarse ? 'pointer:coarse' : null),
+    cm.display_standalone ? 'standalone(PWA)' : null,
+    cm.hdr ? 'HDR' : null,
+    cm.color_gamut_p3 ? 'P3' : null,
+  ].filter(Boolean).join(', ');
+  setText('fp-css-media', mediaStr || '—');
+
+  // Performance (heap, clock resolution, TZ offset)
+  const pf = client.perf || {};
+  setText('fp-perf-memory', pf.memory ? `${pf.memory.used_mb}/${pf.memory.total_mb} MB` : '—');
+  setText('fp-clock-res', pf.clock_resolution_ms != null ? `${pf.clock_resolution_ms} ms` : '—');
+  const tzOff = pf.tz_offset;
+  setText('fp-tz-offset', tzOff != null ? `UTC${tzOff <= 0 ? '+' : ''}${(-tzOff / 60).toFixed(1).replace('.0', '')}` : '—');
+
+  // Media devices
+  const md = client.media_devices;
+  setText('fp-media-devices', md ? `📹${md.cameras} 🎤${md.microphones} 🔊${md.speakers}` : '—');
+
+  // AudioContext details
+  const ac = client.audio_ctx_details;
+  setText('fp-audio-ctx', ac ? `${ac.sample_rate}Hz · ${ac.state}${ac.base_latency != null ? ` · latency:${ac.base_latency}s` : ''}` : '—');
+
+  // Browser API availability
+  const ba = client.browser_apis || {};
+  const apiFlags = [
+    ba.device_motion ? 'motion' : null,
+    ba.device_orientation ? 'orientation' : null,
+    ba.vibrate ? 'vibrate' : null,
+    ba.web_codecs ? 'WebCodecs' : null,
+    ba.sensors ? 'Sensors' : null,
+    ba.xr ? 'WebXR' : null,
+    ba.share ? 'Share' : null,
+    ba.cross_origin_isolated ? 'crossOriginIsolated' : null,
+    ba.trusted_types ? 'trustedTypes' : null,
+    ba.websql ? 'WebSQL' : null,
+    ba.payment_request ? 'PaymentRequest' : null,
+  ].filter(Boolean);
+  setText('fp-browser-apis', apiFlags.join(', ') || 'none');
 
   setText('webrtc-supported', client.webrtc.supported ? 'supported' : 'not supported');
   setText('webrtc-local', client.webrtc.local.length ? client.webrtc.local.join(', ') : '—');
