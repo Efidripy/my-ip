@@ -186,19 +186,146 @@ function buildLeakItems(server, client) {
 }
 
 function calculateScore(server, client, leaks) {
+  return calculateScoreBreakdown(server, client, leaks).score;
+}
+
+function calculateScoreBreakdown(server, client, leaks) {
+  const items = [];
   let score = 100;
   for (const l of leaks) {
-    if (l.level === 'red') score -= 18;
-    else if (l.level === 'yellow') score -= 8;
-    else score -= 2;
+    const pts = l.level === 'red' ? 18 : l.level === 'yellow' ? 8 : 2;
+    score -= pts;
+    items.push({ name: l.title, deduction: pts, level: l.level });
   }
-  if (!server.dnt) score -= 4;
-  if (client.cookie_enabled) score -= 4;
-  if (server.referer_present) score -= 5;
-  if (server.origin_present) score -= 4;
-  if (server.sec_ch_ua_present) score -= 3;
-  if (client.languages && client.languages.length > 2) score -= 3;
-  return Math.max(0, Math.min(100, score));
+  const extras = [
+    { check: !server.dnt,                                    name: 'Нет DNT заголовка',      pts: 4 },
+    { check: client.cookie_enabled,                          name: 'Cookies включены',        pts: 4 },
+    { check: server.referer_present,                         name: 'Referer заголовок',       pts: 5 },
+    { check: server.origin_present,                          name: 'Origin заголовок',        pts: 4 },
+    { check: server.sec_ch_ua_present,                       name: 'Client Hints',            pts: 3 },
+    { check: client.languages && client.languages.length > 2,
+      name: `Много языков (${client.languages?.length ?? 0})`, pts: 3 },
+  ];
+  for (const e of extras) {
+    if (e.check) { score -= e.pts; items.push({ name: e.name, deduction: e.pts, level: 'yellow' }); }
+  }
+  return { score: Math.max(0, Math.min(100, score)), items };
+}
+
+// --- Score breakdown rendering ---
+function renderBreakdown(items) {
+  const grid = $('breakdown-grid');
+  if (!grid) return;
+  grid.replaceChildren();
+  if (!items.length) {
+    const el = document.createElement('div');
+    el.className = 'empty';
+    el.textContent = 'Нет факторов снижения.';
+    grid.appendChild(el);
+    return;
+  }
+  items.forEach((item, i) => {
+    const card = document.createElement('div');
+    card.className = 'bd-item';
+    card.style.animationDelay = `${i * 35}ms`;
+
+    const name = document.createElement('div');
+    name.className = 'bd-name';
+    name.textContent = item.name;
+
+    const cls = item.level === 'red' ? 'danger' : item.level === 'green' ? 'safe' : 'warn';
+    const pts = document.createElement('div');
+    pts.className = `bd-pts ${cls}`;
+    pts.textContent = `−${item.deduction}`;
+
+    const bar = document.createElement('div');
+    bar.className = 'bd-mini-bar';
+    const fill = document.createElement('span');
+    fill.className = cls;
+    fill.style.width = `${Math.min(100, item.deduction * 5.5)}%`;
+    bar.appendChild(fill);
+
+    card.appendChild(name);
+    card.appendChild(pts);
+    card.appendChild(bar);
+    grid.appendChild(card);
+  });
+}
+
+// --- Score count-up animation ---
+function animateCountUp(elementId, target, duration = 750) {
+  const el = $(elementId);
+  if (!el) return;
+  const t0 = performance.now();
+  const step = (now) => {
+    const p = Math.min(1, (now - t0) / duration);
+    const e = 1 - Math.pow(1 - p, 3);
+    el.textContent = `${Math.round(target * e)}/100`;
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// --- Sparkline / score history ---
+const _HIST_KEY = 'myip_score_hist';
+function _saveHist(score) {
+  const h = _getHist();
+  h.push(score);
+  if (h.length > 20) h.splice(0, h.length - 20);
+  try { localStorage.setItem(_HIST_KEY, JSON.stringify(h)); } catch {}
+}
+function _getHist() {
+  try { return JSON.parse(localStorage.getItem(_HIST_KEY) || '[]'); } catch { return []; }
+}
+function renderSparkline(canvasId, scores) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !canvas.getContext || scores.length < 2) {
+    if (canvas) canvas.style.display = 'none';
+    return;
+  }
+  canvas.style.display = 'block';
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth || 220;
+  const H = 48;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  const pad = 5;
+  const uw = W - pad * 2, uh = H - pad * 2;
+  const pts = scores.map((s, i) => [pad + (i / (scores.length - 1)) * uw, pad + (1 - s / 100) * uh]);
+  // Fill area
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) {
+    const mx = (pts[i - 1][0] + pts[i][0]) / 2;
+    ctx.bezierCurveTo(mx, pts[i - 1][1], mx, pts[i][1], pts[i][0], pts[i][1]);
+  }
+  ctx.lineTo(pts[pts.length - 1][0], H);
+  ctx.lineTo(pts[0][0], H);
+  ctx.closePath();
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, 'rgba(104,170,255,.28)');
+  g.addColorStop(1, 'rgba(104,170,255,0)');
+  ctx.fillStyle = g;
+  ctx.fill();
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) {
+    const mx = (pts[i - 1][0] + pts[i][0]) / 2;
+    ctx.bezierCurveTo(mx, pts[i - 1][1], mx, pts[i][1], pts[i][0], pts[i][1]);
+  }
+  ctx.strokeStyle = 'rgba(104,170,255,.9)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  // Last dot
+  const last = pts[pts.length - 1], ls = scores[scores.length - 1];
+  ctx.beginPath();
+  ctx.arc(last[0], last[1], 3, 0, Math.PI * 2);
+  ctx.fillStyle = ls >= 80 ? '#7cf29a' : ls >= 55 ? '#ffd166' : '#ff6b6b';
+  ctx.fill();
 }
 
 function explainScore(score) {
@@ -207,17 +334,45 @@ function explainScore(score) {
   return 'Шумный профиль: адрес, fingerprint и дополнительные сигналы делают тебя хорошо различимым.';
 }
 
-function fillSummary(server, client, leaks, score, risk) {
+function fillSummary(server, client, leaks, score, risk, breakdownItems) {
   setText('main-ip', server.ip);
   setText('geo-country', server.country || '—');
   setText('geo-city', [server.city, server.region].filter(Boolean).join(', ') || '—');
   setText('geo-asn', [server.asn ? 'AS' + server.asn : '', server.as_org].filter(Boolean).join(' • ') || '—');
-  setText('privacy-score', `${score}/100`);
-  renderLevelText('risk-level', textClass(risk), risk === 'red' ? 'high' : risk === 'yellow' ? 'medium' : 'low');
+
+  // Animated score count-up
+  animateCountUp('privacy-score', score);
+
+  // Threat indicator
+  const threatEl = $('threat-indicator');
+  if (threatEl) {
+    threatEl.className = `threat-indicator ${risk}`;
+    const iconEl = $('threat-icon');
+    if (iconEl) iconEl.textContent = risk === 'red' ? '🔴' : risk === 'yellow' ? '🟡' : '🟢';
+  }
+  const threatVal = $('risk-level');
+  if (threatVal) {
+    threatVal.textContent = risk === 'red' ? 'HIGH' : risk === 'yellow' ? 'MEDIUM' : 'LOW';
+  }
+
+  // VPN / WebRTC sub-stats via DOM (no innerHTML)
   renderLevelText('vpn-risk', textClass(server.vpn_hosting_risk === 'high' ? 'red' : server.vpn_hosting_risk === 'medium' ? 'yellow' : 'green'), txt(server.vpn_hosting_risk));
   renderLevelText('webrtc-status', textClass(client.webrtc.public.length ? 'red' : (client.webrtc.local.length || client.webrtc.mdns.length) ? 'yellow' : 'green'), client.webrtc.public.length ? 'public leak' : (client.webrtc.local.length || client.webrtc.mdns.length) ? 'local leak' : 'safe');
-  $('scorebar-fill').style.width = `${score}%`;
-  $('scorebar-fill').style.background = risk === 'red' ? 'linear-gradient(90deg,#ff6b6b,#ffd166)' : risk === 'yellow' ? 'linear-gradient(90deg,#ffd166,#68aaff)' : 'linear-gradient(90deg,#7cf29a,#68ffd5)';
+
+  // Scorebar — reset to 0, then animate to target
+  const fill = $('scorebar-fill');
+  if (fill) {
+    fill.style.transition = 'none';
+    fill.style.width = '0';
+    fill.style.background = risk === 'red' ? 'linear-gradient(90deg,#ff6b6b,#ffd166)' : risk === 'yellow' ? 'linear-gradient(90deg,#ffd166,#68aaff)' : 'linear-gradient(90deg,#7cf29a,#68ffd5)';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        fill.style.transition = '';
+        fill.style.width = `${score}%`;
+      });
+    });
+  }
+
   setText('score-explain', explainScore(score));
   setText('chip-browser', `Браузер: ${client.browser}`);
   setText('chip-os', `OS: ${client.os}`);
@@ -227,6 +382,7 @@ function fillSummary(server, client, leaks, score, risk) {
   setText('chip-tz', `TZ: ${client.timezone || '—'}`);
   setText('updated-at', new Date().toLocaleTimeString());
 
+  // Leak list
   const box = $('leak-list');
   if (box) {
     box.replaceChildren();
@@ -256,6 +412,13 @@ function fillSummary(server, client, leaks, score, risk) {
       box.appendChild(article);
     }
   }
+
+  // Score breakdown
+  renderBreakdown(breakdownItems || []);
+
+  // Sparkline
+  _saveHist(score);
+  renderSparkline('score-sparkline', _getHist());
 }
 
 function fillClientDetails(server, client) {
@@ -319,7 +482,10 @@ async function sendCollect(visitId, client, score, risk, server) {
 }
 
 async function loadAll() {
-  $('api-status').textContent = 'API loading…';
+  const statusDot = $('status-dot');
+  const statusText = $('api-status');
+  if (statusDot) statusDot.className = 'dot loading';
+  if (statusText) statusText.textContent = 'Загрузка…';
   try {
     const apiRes = await fetch('./api.php', { cache: 'no-store' });
     if (!apiRes.ok) throw new Error('HTTP ' + apiRes.status);
@@ -328,10 +494,10 @@ async function loadAll() {
     const server = apiData.client || {};
     const client = await collectClientSignals();
     const leaks = buildLeakItems(server, client);
-    const score = calculateScore(server, client, leaks);
+    const { score, items: breakdownItems } = calculateScoreBreakdown(server, client, leaks);
     const risk = score >= 80 ? 'green' : score >= 55 ? 'yellow' : 'red';
 
-    fillSummary(server, client, leaks, score, risk);
+    fillSummary(server, client, leaks, score, risk, breakdownItems);
     fillClientDetails(server, client);
 
     const combined = {
@@ -345,14 +511,16 @@ async function loadAll() {
     };
     lastJSON = JSON.stringify(combined, null, 2);
     setText('raw-json', lastJSON);
-    $('api-status').textContent = 'API online';
+    if (statusDot) statusDot.className = 'dot';
+    if (statusText) statusText.textContent = 'API online';
 
     if (currentVisitId) {
       await sendCollect(currentVisitId, client, score, risk, server);
     }
   } catch (err) {
     console.error(err);
-    $('api-status').textContent = 'API error';
+    if (statusDot) { statusDot.className = 'dot error'; }
+    if (statusText) statusText.textContent = 'API error';
     setText('raw-json', String(err));
   }
 }

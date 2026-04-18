@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KLEVA My-IP PRO</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="assets/style.css?v=4">
-  <script defer src="assets/app.js?v=4"></script>
+  <link rel="stylesheet" href="assets/style.css?v=5">
+  <script defer src="assets/app.js?v=5"></script>
 </head>
 <body>
   <div class="bg-glow"></div>
@@ -19,7 +19,7 @@
         <p>Показываем только то, что сайты и трекеры видят о посетителе. Без данных о сервере.</p>
       </div>
       <div class="hero-pills">
-        <div class="pill"><span class="dot"></span> <span id="api-status">API online</span></div>
+        <div class="pill"><span class="dot" id="status-dot"></span> <span id="api-status">Загрузка…</span></div>
         <div class="pill">Обновлено: <span id="updated-at">—</span></div>
       </div>
     </header>
@@ -55,13 +55,28 @@
             </div>
 
             <div class="side-panel">
-              <div class="stats-2x2">
-                <div class="stat-box"><span>Privacy score</span><strong id="privacy-score">—</strong></div>
-                <div class="stat-box"><span>Risk level</span><strong id="risk-level">—</strong></div>
-                <div class="stat-box"><span>VPN / hosting</span><strong id="vpn-risk">—</strong></div>
-                <div class="stat-box"><span>WebRTC</span><strong id="webrtc-status">—</strong></div>
+              <div class="score-threat-row">
+                <div class="stat-box score-stat">
+                  <span>Privacy score</span>
+                  <strong id="privacy-score">—</strong>
+                </div>
+                <div class="threat-indicator" id="threat-indicator">
+                  <span class="threat-icon" id="threat-icon">—</span>
+                  <div class="threat-text">
+                    <div class="threat-label">Threat level</div>
+                    <div class="threat-value" id="risk-level">—</div>
+                  </div>
+                </div>
               </div>
               <div class="scorebar"><span id="scorebar-fill"></span></div>
+              <div class="sparkline-wrap">
+                <div class="sparkline-label">История score</div>
+                <canvas id="score-sparkline" class="sparkline" height="48"></canvas>
+              </div>
+              <div class="sub-stats-row">
+                <div class="sub-stat"><span>VPN / hosting</span><strong id="vpn-risk">—</strong></div>
+                <div class="sub-stat"><span>WebRTC</span><strong id="webrtc-status">—</strong></div>
+              </div>
               <p class="muted" id="score-explain">Оцениваем, сколько данных посетитель светит обычному сайту и продвинутому трекеру.</p>
               <div class="actions">
                 <button type="button" class="btn primary" id="refresh-btn">Обновить</button>
@@ -80,6 +95,18 @@
           </div>
           <div class="leak-list" id="leak-list">
             <div class="empty">Собираем сигналы…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Разбивка score</h2>
+              <p>Что и сколько очков снизило твой privacy score.</p>
+            </div>
+          </div>
+          <div class="breakdown-grid" id="breakdown-grid">
+            <div class="empty">Анализируем…</div>
           </div>
         </section>
 
