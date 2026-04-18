@@ -1615,7 +1615,7 @@ function fillSecFetch(server) {
   setText('sf-dest', server.sec_fetch_dest || '—');
   setText('sf-user', server.sec_fetch_user || '—');
   setText('sf-gpc', server.sec_gpc || '—');
-  setText('sf-tls', server.tls_version || '— (nginx не передаёт SSL_PROTOCOL в fastcgi)');
+  setText('sf-tls', server.tls_version || '—');
   setText('sf-cipher', server.tls_cipher || '—');
   setText('sf-http-proto', server.http_version || '—');
 }
