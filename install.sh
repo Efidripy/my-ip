@@ -255,9 +255,65 @@ else
     info "Skipped Tor exit-node list."
 fi
 
-# ── 7. Optional: MaxMind GeoLite2 databases ───────────────────────────────────
+# ── 7. Geo databases: db-ip.com (free, no registration) ──────────────────────
 echo
-ask "Download MaxMind GeoLite2 databases? Requires a free MaxMind account."
+ask "Download free db-ip.com geo databases? (No registration, no key required) [Y/n]: "
+read -r DBIP_ANSWER
+GEO_INSTALLED=false
+if [[ "${DBIP_ANSWER,,}" != "n" ]]; then
+    DATA_DIR="$INSTALL_DIR/data"
+    DBIP_MONTH="$(date +%Y-%m)"
+
+    # Try current month, fall back to previous month if not yet published
+    dbip_try_month() {
+        local month="$1" edition="$2" dest_name="$3"
+        local dest="$DATA_DIR/${dest_name}.mmdb"
+        local url="https://download.db-ip.com/free/${edition}-${month}.mmdb.gz"
+        local tmp_gz
+        tmp_gz="$(mktemp /tmp/dbip_XXXXXX.mmdb.gz)"
+        if curl -fsSL --max-time 120 "$url" -o "$tmp_gz" 2>/dev/null \
+                && [[ -s "$tmp_gz" ]]; then
+            if gunzip -c "$tmp_gz" > "$dest" 2>/dev/null && [[ -s "$dest" ]]; then
+                chown "$WEB_USER":"$WEB_USER" "$dest"
+                chmod 644 "$dest"
+                ok "${dest_name}.mmdb (${month}) installed → $dest"
+                rm -f "$tmp_gz"
+                return 0
+            else
+                rm -f "$dest"
+            fi
+        fi
+        rm -f "$tmp_gz"
+        return 1
+    }
+
+    download_dbip() {
+        local edition="$1"
+        local dest_name="$2"
+        info "Downloading ${edition} from db-ip.com…"
+        if dbip_try_month "$DBIP_MONTH" "$edition" "$dest_name"; then
+            return
+        fi
+        # Previous month (compatible with both GNU and BSD date)
+        local prev_month
+        prev_month="$(date -d 'last month' +%Y-%m 2>/dev/null \
+                   || date -v-1m +%Y-%m 2>/dev/null || true)"
+        if [[ -n "$prev_month" ]] && dbip_try_month "$prev_month" "$edition" "$dest_name"; then
+            return
+        fi
+        warn "Could not download ${edition} from db-ip.com. Skipping."
+    }
+
+    download_dbip "dbip-city-lite" "GeoLite2-City"
+    download_dbip "dbip-asn-lite"  "GeoLite2-ASN"
+    GEO_INSTALLED=true
+else
+    info "Skipped db-ip.com databases."
+fi
+
+# ── 7b. Optional: MaxMind GeoLite2 (alternative / supplement, requires free account) ──
+echo
+ask "Also download MaxMind GeoLite2 databases? Requires a free MaxMind account."
 ask "Enter your MaxMind license key (or press Enter to skip): "
 read -r MM_KEY
 if [[ -n "$MM_KEY" ]]; then
@@ -285,6 +341,7 @@ if [[ -n "$MM_KEY" ]]; then
                     chown "$WEB_USER":"$WEB_USER" "$dest"
                     chmod 644 "$dest"
                     ok "${edition}.mmdb installed → $dest"
+                    GEO_INSTALLED=true
                 else
                     warn "Could not extract ${edition}.mmdb from archive."
                 fi
@@ -300,7 +357,13 @@ if [[ -n "$MM_KEY" ]]; then
     download_mmdb "GeoLite2-City"
     download_mmdb "GeoLite2-ASN"
 else
-    info "Skipped MaxMind databases. Copy GeoLite2-City.mmdb and GeoLite2-ASN.mmdb to ${INSTALL_DIR}/data/ manually to enable IP geolocation."
+    info "Skipped MaxMind databases."
+fi
+
+if [[ "$GEO_INSTALLED" == false ]]; then
+    info "No local geo databases installed. The app will fall back to the ip-api.com HTTP API"
+    info "(no setup needed — works out of the box, up to 45 requests/min)."
+    info "To enable offline lookups later, place GeoLite2-City.mmdb and GeoLite2-ASN.mmdb in ${INSTALL_DIR}/data/"
 fi
 
 # ── 8. Reload nginx ───────────────────────────────────────────────────────────
