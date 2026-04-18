@@ -375,7 +375,6 @@ async function collectClientSignals() {
     canvas_hash: await sha256(canvas),
     audio_hash: await sha256(String(audio)),
     webgl,
-    fonts,
     fonts_count: fonts.length,
     battery,
     network,
@@ -1781,7 +1780,7 @@ async function sendCollect(visitId, client, score, risk, server) {
         fingerprint_hash: client.fingerprint_hash,
         privacy_score: score,
         risk_level: risk,
-        notes: server.vpn_hosting_reason || ''
+        vpn_reason: server.vpn_hosting_reason || ''
       })
     });
     return await res.json();

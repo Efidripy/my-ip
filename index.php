@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KLEVA My-IP PRO</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="assets/style.css?v=8">
-  <script defer src="assets/app.js?v=8"></script>
+  <link rel="stylesheet" href="assets/style.css?v=9">
+  <script defer src="assets/app.js?v=9"></script>
 </head>
 <body>
   <div class="bg-glow"></div>

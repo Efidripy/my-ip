@@ -44,6 +44,7 @@ function db(): PDO {
             referer_present INTEGER DEFAULT 0,
             origin_present INTEGER DEFAULT 0,
             sec_ch_ua_present INTEGER DEFAULT 0,
+            sec_ch_ua TEXT,
             geo_country TEXT,
             geo_city TEXT,
             geo_region TEXT,
@@ -57,13 +58,17 @@ function db(): PDO {
             client_hash TEXT,
             privacy_score INTEGER,
             risk_level TEXT,
-            notes TEXT
+            vpn_reason TEXT
         );'
     );
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_visits_created_at ON visits(created_at DESC);');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_visits_ip ON visits(ip);');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_visits_hash ON visits(client_hash);');
+
+    // Migrations for existing databases
+    try { $pdo->exec('ALTER TABLE visits ADD COLUMN sec_ch_ua TEXT;'); } catch (Throwable) {}
+    try { $pdo->exec('ALTER TABLE visits ADD COLUMN vpn_reason TEXT;'); } catch (Throwable) {}
 
     return $pdo;
 }

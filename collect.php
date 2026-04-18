@@ -22,18 +22,18 @@ $clientJson = json_encode($data['client'] ?? [], JSON_UNESCAPED_UNICODE | JSON_U
 $clientHash = (string)($data['fingerprint_hash'] ?? '');
 $privacyScore = isset($data['privacy_score']) ? (int)$data['privacy_score'] : null;
 $riskLevel = (string)($data['risk_level'] ?? '');
-$notes = (string)($data['notes'] ?? '');
+$vpnReason = (string)($data['vpn_reason'] ?? '');
 
 try {
     $pdo = db();
-    $stmt = $pdo->prepare('UPDATE visits SET updated_at = :updated_at, client_json = :client_json, client_hash = :client_hash, privacy_score = :privacy_score, risk_level = :risk_level, notes = :notes WHERE id = :id');
+    $stmt = $pdo->prepare('UPDATE visits SET updated_at = :updated_at, client_json = :client_json, client_hash = :client_hash, privacy_score = :privacy_score, risk_level = :risk_level, vpn_reason = :vpn_reason WHERE id = :id');
     $stmt->execute([
         ':updated_at' => gmdate('c'),
         ':client_json' => $clientJson,
         ':client_hash' => $clientHash,
         ':privacy_score' => $privacyScore,
         ':risk_level' => $riskLevel,
-        ':notes' => $notes,
+        ':vpn_reason' => $vpnReason,
         ':id' => $visitId,
     ]);
 
