@@ -16,7 +16,7 @@
       <div>
         <div class="eyebrow">KLEVA • client-only intelligence</div>
         <h1>My IP • Privacy • Fingerprint</h1>
-        <p>Показываем только то, что сайты и трекеры видят о посетителе. Без данных о сервере.</p>
+        <p>Показываем только то, что сайты и трекеры видят о посетителе.</p>
       </div>
       <div class="hero-pills">
         <div class="pill"><span class="dot" id="status-dot"></span> <span id="api-status">Загрузка…</span></div>
@@ -412,15 +412,6 @@
           </div>
         </section>
 
-        <section class="card glass">
-          <div class="card-head">
-            <div>
-              <h2>Сырые данные</h2>
-              <p>JSON, который собрался на этой странице.</p>
-            </div>
-          </div>
-          <pre id="raw-json" class="raw-box">Инициализация…</pre>
-        </section>
       </div>
     </section>
 
