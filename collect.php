@@ -54,7 +54,8 @@ try {
         }
     }
 } catch (Throwable $e) {
-    json_response(['ok' => false, 'error' => $e->getMessage()], 500);
+    error_log('collect.php: ' . $e->getMessage());
+    json_response(['ok' => false, 'error' => 'internal_error'], 500);
 }
 
 json_response(['ok' => true, 'prev_visit' => $prevVisit]);

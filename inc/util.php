@@ -106,3 +106,67 @@ function require_admin(): void {
         exit;
     }
 }
+
+/**
+ * Return the XFF header with private/bogon IPv4 addresses replaced by «a.x.x.b»
+ * so internal proxy hops are not forwarded verbatim to the end-user.
+ */
+function mask_private_in_xff(string $xff): string {
+    if ($xff === '') return '';
+    $parts = explode(',', $xff);
+    $masked = [];
+    foreach ($parts as $part) {
+        $ip = trim($part);
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && is_bogon_ip($ip)) {
+            $octets = explode('.', $ip);
+            $masked[] = $octets[0] . '.x.x.' . $octets[3];
+        } else {
+            $masked[] = $ip;
+        }
+    }
+    return implode(', ', $masked);
+}
+
+/**
+ * Classify a TLS cipher string as «modern», «transitional», or «legacy».
+ * Returns empty string when no cipher is provided.
+ */
+function classify_tls_cipher(string $cipher): string {
+    if ($cipher === '') return '';
+    $c = strtolower($cipher);
+    // Clearly broken
+    if (str_contains($c, 'rc4') || str_contains($c, '3des') || str_contains($c, 'des-')
+        || str_contains($c, 'null') || str_contains($c, 'export') || str_contains($c, 'md5')) {
+        return 'legacy';
+    }
+    // Modern: ECDHE + AEAD (GCM or ChaCha20)
+    if (str_contains($c, 'ecdhe') && (str_contains($c, 'gcm') || str_contains($c, 'chacha20'))) {
+        return 'modern';
+    }
+    return 'transitional';
+}
+
+/**
+ * Guess whether an ASN organisation is a datacenter, mobile carrier, or residential ISP.
+ */
+function classify_asn_type(string $org): string {
+    if ($org === '') return 'unknown';
+    $o = strtolower($org);
+    $mobileSignals = [
+        'mobile', 'cellular', 'wireless', 'gsm', 'lte', 'mts ', 'megafon',
+        'beeline', 'verizon wireless', "at&t mobility", 't-mobile',
+    ];
+    foreach ($mobileSignals as $m) {
+        if (str_contains($o, $m)) return 'mobile';
+    }
+    $datacenterSignals = [
+        'amazon', 'aws', 'google cloud', 'digitalocean', 'microsoft', 'azure',
+        'ovh', 'hetzner', 'vultr', 'linode', 'oracle', 'contabo', 'scaleway',
+        'leaseweb', 'choopa', 'server', 'hosting', 'datacenter', 'colo', 'cloud',
+        'vpn', 'proxy', 'cdn', 'fastly', 'cloudflare', 'akamai',
+    ];
+    foreach ($datacenterSignals as $d) {
+        if (str_contains($o, $d)) return 'datacenter';
+    }
+    return 'residential';
+}

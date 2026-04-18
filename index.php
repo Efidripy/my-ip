@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KLEVA My-IP PRO</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="assets/style.css?v=7">
-  <script defer src="assets/app.js?v=7"></script>
+  <link rel="stylesheet" href="assets/style.css?v=8">
+  <script defer src="assets/app.js?v=8"></script>
 </head>
 <body>
   <div class="bg-glow"></div>
@@ -79,6 +79,10 @@
                 <div class="sub-stat"><span>VPN / hosting</span><strong id="vpn-risk">—</strong></div>
                 <div class="sub-stat"><span>WebRTC</span><strong id="webrtc-status">—</strong></div>
               </div>
+              <div class="sub-stats-row">
+                <div class="sub-stat"><span>Server exposure</span><strong id="server-exposure">—</strong></div>
+                <div class="sub-stat"><span>ASN тип</span><strong id="asn-type-stat">—</strong></div>
+              </div>
               <p class="muted" id="score-explain">Оцениваем, сколько данных посетитель светит обычному сайту и продвинутому трекеру.</p>
               <div class="actions">
                 <button type="button" class="btn primary" id="refresh-btn">Обновить</button>
@@ -144,6 +148,26 @@
         <section class="card glass">
           <div class="card-head">
             <div>
+              <h2>IP Intelligence</h2>
+              <p>Классификация IP, сетевой тип и уверенность в прокси.</p>
+            </div>
+            <span class="pill subtle" id="asn-type-pill">—</span>
+          </div>
+          <div class="kv-grid">
+            <div class="kv"><span>Тип сети ASN</span><strong id="ip-asn-type">—</strong></div>
+            <div class="kv"><span>IP версия</span><strong id="ip-version-intel">—</strong></div>
+            <div class="kv"><span>Организация / ASN</span><strong id="ip-org-intel">—</strong></div>
+            <div class="kv"><span>Регион</span><strong id="ip-region-intel">—</strong></div>
+            <div class="kv"><span>Proxy confidence</span><strong id="ip-proxy-conf">—</strong></div>
+            <div class="kv"><span>DNSBL попаданий</span><strong id="ip-dnsbl-intel">—</strong></div>
+            <div class="kv"><span>Tor exit node</span><strong id="ip-tor-intel">—</strong></div>
+            <div class="kv"><span>Геоточность</span><strong id="ip-geo-accuracy-intel">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
               <h2>Риски по категориям</h2>
               <p>Вклад сетевых, браузерных, поведенческих и протокольных сигналов.</p>
             </div>
@@ -159,6 +183,10 @@
               <h2>Дрифт параметров</h2>
               <p>Изменения fingerprint между текущим и прошлым визитом.</p>
             </div>
+          </div>
+          <div class="stability-row" id="stability-row" style="display:none">
+            <span class="stability-label">Стабильность (посл. <span id="stab-n">0</span> визитов)</span>
+            <strong id="stab-score">—</strong>
           </div>
           <div id="drift-list" class="drift-list">
             <div class="empty">Собираем…</div>
@@ -349,6 +377,25 @@
             <div class="kv"><span>Cross-Origin-Embedder-Policy</span><strong id="sec-coep">—</strong></div>
             <div class="kv"><span>X-Frame-Options</span><strong id="sec-xfo">—</strong></div>
             <div class="kv"><span>Strict-Transport-Security</span><strong id="sec-hsts">—</strong></div>
+            <div class="kv"><span>Permissions-Policy</span><strong id="sec-pp">—</strong></div>
+            <div class="kv"><span>X-Content-Type-Options</span><strong id="sec-xcto">—</strong></div>
+            <div class="kv"><span>Cross-Origin-Resource-Policy</span><strong id="sec-corp">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Server-Info Exposure</h2>
+              <p>Проверяем, не раскрывает ли сервер лишней внутренней информации клиенту.</p>
+            </div>
+            <span class="pill subtle" id="server-exposure-pill">—</span>
+          </div>
+          <div class="kv-grid">
+            <div class="kv"><span>Уровень риска</span><strong id="sei-level">—</strong></div>
+            <div class="kv"><span>Приватный IP в XFF</span><strong id="sei-private-xff">—</strong></div>
+            <div class="kv"><span>TLS шифр виден</span><strong id="sei-cipher-visible">—</strong></div>
+            <div class="kv"><span>TLS cipher grade</span><strong id="sei-cipher-grade">—</strong></div>
           </div>
         </section>
 
