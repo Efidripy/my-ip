@@ -72,6 +72,10 @@ KLEVA My-IP PRO
   Содержимое snippets (пример для prefix /my-ip):
 
   # my-ip-location.conf
+  location = /my-ip {
+      return 301 /my-ip/;
+  }
+
   location /my-ip/ {
       alias /var/www/my-ip/;
       index index.php;
@@ -95,4 +99,3 @@ KLEVA My-IP PRO
 ════════════════════════════════════════════
 
   https://yourdomain/my-ip/admin.php?token=YOUR_TOKEN
-

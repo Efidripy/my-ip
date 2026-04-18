@@ -147,6 +147,10 @@ else
 
     cat > "$SNIPPET_LOC" <<NGINX_LOC
 # KLEVA My-IP PRO — sub-path location
+location = /${STRIPPED} {
+    return 301 /${STRIPPED}/;
+}
+
 location /${STRIPPED}/ {
     alias ${INSTALL_DIR}/;
     index index.php;
