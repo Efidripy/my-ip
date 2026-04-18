@@ -69,7 +69,7 @@ function is_admin_authorized(): bool {
 function require_admin(): void {
     if (!is_admin_authorized()) {
         http_response_code(403);
-        echo '<!doctype html><meta charset="utf-8"><title>403</title><body style="font-family:sans-serif;background:#0b1220;color:#fff;padding:32px">403 — admin token required.<br>Установи <code>MY_IP_ADMIN_TOKEN</code> (или задай <code>admin_token</code> в <code>inc/config.php</code>) и открой страницу как <code>?token=YOUR_TOKEN</code>.</body>';
+        echo '<!doctype html><meta charset="utf-8"><title>403</title><body style="font-family:sans-serif;background:#0b1220;color:#fff;padding:32px">403 — access denied.</body>';
         exit;
     }
 }
