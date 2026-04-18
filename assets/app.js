@@ -203,7 +203,7 @@ function calculateScoreBreakdown(server, client, leaks) {
     { check: server.referer_present,                         name: 'Referer заголовок',       pts: 5 },
     { check: server.origin_present,                          name: 'Origin заголовок',        pts: 4 },
     { check: server.sec_ch_ua_present,                       name: 'Client Hints',            pts: 3 },
-    { check: (client.languages?.length ?? 0) > 2,
+    { check: (client.languages?.length ?? 0) > MAX_SAFE_LANGUAGES,
       name: `Много языков (${client.languages?.length ?? 0})`, pts: 3 },
   ];
   for (const e of extras) {
@@ -212,7 +212,10 @@ function calculateScoreBreakdown(server, client, leaks) {
   return { score: Math.max(0, Math.min(100, score)), items };
 }
 
-// --- Score breakdown rendering ---
+// Constants
+const MAX_SAFE_LANGUAGES = 2;
+const BREAKDOWN_BAR_SCALE = 5.5;
+const MAX_SCORE_HISTORY = 20;
 function renderBreakdown(items) {
   const grid = $('breakdown-grid');
   if (!grid) return;
@@ -242,7 +245,7 @@ function renderBreakdown(items) {
     bar.className = 'bd-mini-bar';
     const fill = document.createElement('span');
     fill.className = cls;
-    fill.style.width = `${Math.min(100, item.deduction * 5.5)}%`;
+    fill.style.width = `${Math.min(100, item.deduction * BREAKDOWN_BAR_SCALE)}%`;
     bar.appendChild(fill);
 
     card.appendChild(name);
@@ -271,7 +274,7 @@ const _HIST_KEY = 'myip_score_hist';
 function _saveHist(score) {
   const h = _getHist();
   h.push(score);
-  if (h.length > 20) h.splice(0, h.length - 20);
+  if (h.length > MAX_SCORE_HISTORY) h.splice(0, h.length - MAX_SCORE_HISTORY);
   try { localStorage.setItem(_HIST_KEY, JSON.stringify(h)); } catch {}
 }
 function _getHist() {

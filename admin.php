@@ -17,12 +17,13 @@ $avgScore     = (int)round((float)$pdo->query("SELECT COALESCE(AVG(privacy_score
 $chartRows = $pdo->query(
     "SELECT date(created_at) as day, COUNT(*) as cnt,
             COALESCE(CAST(AVG(CASE WHEN privacy_score IS NOT NULL THEN privacy_score END) AS INTEGER),0) as avg_score
-     FROM visits WHERE created_at >= datetime('now','-14 days')
+     FROM visits WHERE created_at >= datetime('now','-{$chartDays} days')
      GROUP BY day ORDER BY day ASC"
 )->fetchAll();
 
+$chartDays = 14;
 $chartByDay = [];
-for ($i = 13; $i >= 0; $i--) {
+for ($i = $chartDays - 1; $i >= 0; $i--) {
     $d = date('Y-m-d', strtotime("-{$i} days"));
     $chartByDay[$d] = ['cnt' => 0, 'avg_score' => 0];
 }
