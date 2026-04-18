@@ -23,14 +23,33 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}       KLEVA My-IP PRO — installer                    ${NC}"
+echo -e "${BOLD}    KLEVA My-IP PRO — installer / updater             ${NC}"
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo
+
+detect_existing_project() {
+    local dir="$1"
+    [[ -f "$dir/index.php" && -f "$dir/api.php" && -f "$dir/inc/config.php" ]]
+}
 
 # ── interactive questions ─────────────────────────────────────────────────────
 ask "Install directory [/var/www/my-ip]: "
 read -r INSTALL_DIR
 INSTALL_DIR="${INSTALL_DIR:-/var/www/my-ip}"
+
+MODE="install"
+if detect_existing_project "$INSTALL_DIR"; then
+    warn "Detected existing My-IP project in ${INSTALL_DIR}"
+    ask "Choose action: [U]pdate existing install or [I]nstall over it [U]: "
+    read -r ACTION_ANSWER
+    if [[ "${ACTION_ANSWER,,}" == "i" ]]; then
+        MODE="install"
+        warn "Install mode selected — project files will be overwritten."
+    else
+        MODE="update"
+        ok "Update mode selected — preserving data/, .env and inc/config.php"
+    fi
+fi
 
 ask "URL sub-path prefix (e.g. /my-ip or / for root) [/my-ip]: "
 read -r URL_PREFIX
@@ -78,16 +97,31 @@ if [[ "$FPM_SOCK" == "/run/php/php-fpm.sock" && -S "/run/php/php${PHP_VER}-fpm.s
     info "Auto-detected PHP-FPM socket: $FPM_SOCK"
 fi
 
-# ── 2. Copy application files ─────────────────────────────────────────────────
-info "Copying application to ${INSTALL_DIR}…"
+# ── 2. Copy / update application files ────────────────────────────────────────
+if [[ "$MODE" == "update" ]]; then
+    info "Updating application in ${INSTALL_DIR}…"
+else
+    info "Copying application to ${INSTALL_DIR}…"
+fi
 mkdir -p "$INSTALL_DIR"
-rsync -a --exclude='.git' --exclude='install.sh' --exclude='data' \
-    "$SCRIPT_DIR/" "$INSTALL_DIR/" 2>/dev/null || \
-    cp -r "$SCRIPT_DIR"/. "$INSTALL_DIR/"
+if [[ "$MODE" == "update" ]]; then
+    tar -C "$SCRIPT_DIR" \
+        --exclude='.git' --exclude='install.sh' --exclude='data' \
+        --exclude='.env' --exclude='inc/config.php' \
+        -cf - . | tar -C "$INSTALL_DIR" -xf -
+else
+    tar -C "$SCRIPT_DIR" \
+        --exclude='.git' --exclude='install.sh' --exclude='data' \
+        -cf - . | tar -C "$INSTALL_DIR" -xf -
+fi
 
 # Ensure data directory exists with correct permissions
 mkdir -p "$INSTALL_DIR/data"
-ok "Files copied"
+if [[ "$MODE" == "update" ]]; then
+    ok "Files updated"
+else
+    ok "Files copied"
+fi
 
 # ── 3. Permissions ────────────────────────────────────────────────────────────
 info "Setting permissions…"
@@ -295,7 +329,11 @@ fi
 # ── 9. Summary ────────────────────────────────────────────────────────────────
 echo
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}  Installation complete!${NC}"
+if [[ "$MODE" == "update" ]]; then
+    echo -e "${GREEN}${BOLD}  Update complete!${NC}"
+else
+    echo -e "${GREEN}${BOLD}  Installation complete!${NC}"
+fi
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo
 echo -e "  App directory : ${CYAN}${INSTALL_DIR}${NC}"
