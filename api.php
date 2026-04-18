@@ -76,6 +76,7 @@ $client = [
         'level'  => $exposure_level,
         'issues' => $exposure_issues,
     ],
+    'all_request_headers' => getallheaders() ?: [],
 ];
 
 $visitId = null;

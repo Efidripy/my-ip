@@ -99,6 +99,101 @@ function getWebGLInfo() {
   } catch { return { renderer: 'unsupported' }; }
 }
 
+function getWebGLDetailedInfo() {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (!gl) return null;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const anisExt = gl.getExtension('EXT_texture_filter_anisotropic');
+    const allExt = gl.getSupportedExtensions() || [];
+    const vf = gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_FLOAT);
+    const ff = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+    const NOTABLE = ['EXT_color_buffer_float','OES_texture_float','WEBGL_depth_texture',
+                     'OES_standard_derivatives','ANGLE_instanced_arrays','EXT_disjoint_timer_query',
+                     'WEBGL_debug_renderer_info','OES_vertex_array_object'];
+    return {
+      vendor:               ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : null,
+      renderer:             ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'available',
+      version:              gl.getParameter(gl.VERSION),
+      shading_language:     gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+      max_texture_size:     gl.getParameter(gl.MAX_TEXTURE_SIZE),
+      max_renderbuffer:     gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),
+      max_cube_map:         gl.getParameter(gl.MAX_CUBE_MAP_TEXTURE_SIZE),
+      max_anisotropy:       anisExt ? gl.getParameter(anisExt.MAX_TEXTURE_MAX_ANISOTROPY_EXT) : null,
+      vertex_precision:     vf ? vf.precision : null,
+      fragment_precision:   ff ? ff.precision : null,
+      extensions_count:     allExt.length,
+      extensions_notable:   allExt.filter(e => NOTABLE.includes(e)),
+    };
+  } catch { return null; }
+}
+
+function getCssSupportFeatures() {
+  const sup = (q) => { try { return CSS.supports(q); } catch { return false; } };
+  return {
+    grid_subgrid:        sup('grid-template-rows: subgrid'),
+    container_queries:   sup('container-type: inline-size'),
+    color_mix:           sup('color: color-mix(in srgb, red, blue)'),
+    has_selector:        sup('selector(:has(a))'),
+    dvh_units:           sup('height: 1dvh'),
+    logical_properties:  sup('margin-inline: 0'),
+    oklch_color:         sup('color: oklch(50% 0.2 120)'),
+    p3_color:            sup('color: color(display-p3 1 0 0)'),
+    cascade_layers:      typeof CSSLayerBlockRule !== 'undefined',
+    scroll_timeline:     sup('animation-timeline: scroll()'),
+    anchor_positioning:  sup('anchor-name: --foo'),
+    nesting:             sup('& { color: red }'),
+  };
+}
+
+function getSystemColors() {
+  try {
+    const inp = document.createElement('input');
+    inp.type = 'checkbox';
+    inp.style.cssText = 'position:absolute;left:-9999px;visibility:hidden';
+    document.body.appendChild(inp);
+    const st = getComputedStyle(inp);
+    const accent = st.accentColor || null;
+    document.body.removeChild(inp);
+    return {
+      accent_color:  accent,
+      color_scheme:  getComputedStyle(document.documentElement).colorScheme || null,
+    };
+  } catch { return null; }
+}
+
+function getExtendedApis() {
+  const has = (obj, key) => !!(obj && key in obj);
+  return {
+    bluetooth:             has(navigator, 'bluetooth'),
+    usb:                   has(navigator, 'usb'),
+    serial:                has(navigator, 'serial'),
+    hid:                   has(navigator, 'hid'),
+    nfc:                   has(navigator, 'nfc'),
+    keyboard:              has(navigator, 'keyboard'),
+    contacts:              has(navigator, 'contacts'),
+    presentation:          has(navigator, 'presentation'),
+    wake_lock:             has(navigator, 'wakeLock'),
+    scheduling:            has(navigator, 'scheduling'),
+    ink:                   has(navigator, 'ink'),
+    gamepads:              typeof navigator.getGamepads === 'function',
+    midi:                  has(navigator, 'requestMIDIAccess'),
+    file_system_access:    typeof window.showOpenFilePicker === 'function',
+    eye_dropper:           typeof window.EyeDropper !== 'undefined',
+    screen_capture:        has(navigator.mediaDevices || {}, 'getDisplayMedia'),
+    window_management:     typeof window.getScreenDetails === 'function',
+  };
+}
+
+async function detectIPv6() {
+  try {
+    const res = await fetch('./ipv6.php', { cache: 'no-store' });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+}
+
 function detectFonts() {
   const list = [
     'Arial', 'Arial Black', 'Arial Narrow', 'Calibri', 'Cambria', 'Candara',
@@ -393,6 +488,10 @@ async function collectClientSignals() {
     storage_state,
     cookie_test,
     client_hints,
+    css_supports: getCssSupportFeatures(),
+    system_colors: getSystemColors(),
+    webgl_detailed: getWebGLDetailedInfo(),
+    extended_apis: getExtendedApis(),
   };
   const fpSource = JSON.stringify([
     client.browser, client.os, client.device, client.engine,
@@ -1769,6 +1868,259 @@ function setupExportButtons(getJson) {
   }
 }
 
+// ============================================================
+// NEW RENDERING FUNCTIONS — v10
+// ============================================================
+
+function fillHttpHeaders(headers) {
+  const grid = $('http-headers-grid');
+  if (!grid) return;
+  if (!headers || typeof headers !== 'object') {
+    grid.innerHTML = '<div class="empty">—</div>';
+    return;
+  }
+  grid.replaceChildren();
+  const entries = Object.entries(headers);
+  if (!entries.length) {
+    grid.innerHTML = '<div class="empty">Заголовки не получены.</div>';
+    return;
+  }
+  // Sort: security/fingerprint-relevant headers first
+  const PRIORITY = ['User-Agent','Accept','Accept-Language','Accept-Encoding',
+                    'Accept-Charset','Connection','TE','Cache-Control',
+                    'Pragma','Upgrade-Insecure-Requests','Sec-Fetch-Site',
+                    'Sec-Fetch-Mode','Sec-Fetch-Dest','Sec-Fetch-User',
+                    'Sec-Ch-Ua','Sec-Ch-Ua-Mobile','Sec-Ch-Ua-Platform',
+                    'Sec-Gpc','Dnt','Referer'];
+  entries.sort(([a], [b]) => {
+    const ai = PRIORITY.indexOf(a), bi = PRIORITY.indexOf(b);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.localeCompare(b);
+  });
+  for (const [name, value] of entries) {
+    const div = document.createElement('div');
+    div.className = 'kv';
+    const label = document.createElement('span');
+    label.textContent = name;
+    const val = document.createElement('strong');
+    val.className = 'mono';
+    val.style.fontSize = '11px';
+    val.textContent = String(value);
+    div.appendChild(label);
+    div.appendChild(val);
+    grid.appendChild(div);
+  }
+}
+
+function fillIPv6Test(mainIp, mainVer, ipv6result) {
+  setText('ipv6-main-ip', mainIp || '—');
+  setText('ipv6-main-ver', mainVer || '—');
+  if (!ipv6result) {
+    setText('ipv6-detected', 'Недоступен (нет IPv6 на сервере)');
+    setText('ipv6-ep-ver', '—');
+    const statusEl = $('ipv6-status');
+    if (statusEl) { statusEl.textContent = '⚪ Тест недоступен'; statusEl.className = ''; }
+    const pill = $('ipv6-pill');
+    if (pill) pill.textContent = '⚪ N/A';
+    return;
+  }
+  setText('ipv6-detected', ipv6result.ip || '—');
+  setText('ipv6-ep-ver', ipv6result.version || '—');
+  const statusEl = $('ipv6-status');
+  const pill = $('ipv6-pill');
+  const mainIsV4 = mainVer === 'IPv4';
+  const epIsV6 = ipv6result.version === 'IPv6';
+  if (mainIsV4 && epIsV6) {
+    if (statusEl) { statusEl.textContent = '🔴 IPv6 leak — реальный IPv6 раскрыт при IPv4-VPN'; statusEl.className = 'red-text'; }
+    if (pill) pill.textContent = '🔴 Leak';
+  } else if (!epIsV6) {
+    if (statusEl) { statusEl.textContent = '🟢 IPv6 не используется / заблокирован'; statusEl.className = 'green-text'; }
+    if (pill) pill.textContent = '🟢 Safe';
+  } else {
+    if (statusEl) { statusEl.textContent = '🟡 IPv6 используется (основное соединение тоже IPv6)'; statusEl.className = 'yellow-text'; }
+    if (pill) pill.textContent = '🟡 IPv6';
+  }
+}
+
+function fillFingerprintUniqueness(uniqueness, fpHash) {
+  setText('fp-uniq-hash', fpHash || '—');
+  if (!uniqueness) {
+    setText('fp-uniq-sessions', '—');
+    setText('fp-uniq-ips', '—');
+    setText('fp-uniq-level', '—');
+    const pill = $('fp-unique-pill');
+    if (pill) pill.textContent = 'нет данных';
+    return;
+  }
+  const { total_sessions, unique_ips } = uniqueness;
+  setText('fp-uniq-sessions', String(total_sessions));
+  setText('fp-uniq-ips', String(unique_ips));
+  const levelEl = $('fp-uniq-level');
+  const pill = $('fp-unique-pill');
+  if (total_sessions === 1) {
+    if (levelEl) { levelEl.textContent = '🟢 Первый раз — уникальный'; levelEl.className = 'green-text'; }
+    if (pill) pill.textContent = '🟢 Уникальный';
+  } else if (unique_ips > 1) {
+    if (levelEl) { levelEl.textContent = `🔴 Виден с ${unique_ips} IP — надёжно отслеживается`; levelEl.className = 'red-text'; }
+    if (pill) pill.textContent = '🔴 Отслеживается';
+  } else {
+    if (levelEl) { levelEl.textContent = `🟡 ${total_sessions} сессий, 1 IP — скорее всего ты`; levelEl.className = 'yellow-text'; }
+    if (pill) pill.textContent = '🟡 ' + total_sessions + ' сессий';
+  }
+}
+
+function fillVisitTimeline(timeline) {
+  const box = $('visit-timeline');
+  if (!box) return;
+  if (!timeline || !timeline.length) {
+    box.innerHTML = '<div class="empty">Данных нет — это первый визит с таким fingerprint.</div>';
+    return;
+  }
+  box.replaceChildren();
+  timeline.forEach((visit, i) => {
+    const item = document.createElement('div');
+    item.className = 'timeline-item';
+    const dot = document.createElement('div');
+    dot.className = 'timeline-dot ' + (i === 0 ? 'same' : 'diff');
+    const meta = document.createElement('div');
+    meta.className = 'timeline-meta';
+    const date = document.createElement('div');
+    date.className = 'timeline-date';
+    // Format date nicely
+    try {
+      const d = new Date(visit.created_at);
+      date.textContent = d.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+    } catch { date.textContent = String(visit.created_at || '?'); }
+    const ipEl = document.createElement('div');
+    ipEl.className = 'timeline-ip';
+    // Mask middle of IP for display
+    const ip = String(visit.ip || '?');
+    const parts = ip.split('.');
+    const maskedIp = parts.length === 4 ? `${parts[0]}.${parts[1]}.x.x` : ip;
+    const loc = [visit.geo_city, visit.geo_country].filter(Boolean).join(', ');
+    ipEl.textContent = maskedIp + (loc ? ' • ' + loc : '');
+    meta.appendChild(date);
+    meta.appendChild(ipEl);
+    item.appendChild(dot);
+    item.appendChild(meta);
+    if (i === 0) {
+      const badge = document.createElement('span');
+      badge.className = 'badge green';
+      badge.textContent = 'текущий';
+      item.appendChild(badge);
+    }
+    box.appendChild(item);
+  });
+}
+
+function fillWebGLDetailed(webgl) {
+  const grid = $('webgl-detailed-grid');
+  if (!grid) return;
+  if (!webgl) {
+    grid.innerHTML = '<div class="empty">WebGL недоступен или заблокирован.</div>';
+    return;
+  }
+  grid.replaceChildren();
+  const rows = [
+    ['Vendor', webgl.vendor],
+    ['Renderer', webgl.renderer],
+    ['GL Version', webgl.version],
+    ['GLSL Version', webgl.shading_language],
+    ['Max Texture Size', webgl.max_texture_size ? `${webgl.max_texture_size}px` : null],
+    ['Max Renderbuffer', webgl.max_renderbuffer ? `${webgl.max_renderbuffer}px` : null],
+    ['Max Cube Map', webgl.max_cube_map ? `${webgl.max_cube_map}px` : null],
+    ['Max Anisotropy', webgl.max_anisotropy],
+    ['Vertex Precision', webgl.vertex_precision != null ? webgl.vertex_precision + ' бит' : null],
+    ['Fragment Precision', webgl.fragment_precision != null ? webgl.fragment_precision + ' бит' : null],
+    ['Extensions count', webgl.extensions_count],
+    ['Notable extensions', (webgl.extensions_notable || []).join(', ') || '—'],
+  ];
+  for (const [label, value] of rows) {
+    const div = document.createElement('div');
+    div.className = 'kv';
+    const s = document.createElement('span');
+    s.textContent = label;
+    const strong = document.createElement('strong');
+    strong.style.fontSize = '12px';
+    strong.textContent = value != null && value !== '' ? String(value) : '—';
+    div.appendChild(s);
+    div.appendChild(strong);
+    grid.appendChild(div);
+  }
+}
+
+function fillFeatureGrid(containerId, entries, scoreEl) {
+  const grid = $(containerId);
+  if (!grid) return;
+  grid.replaceChildren();
+  let yes = 0;
+  for (const [label, value] of entries) {
+    const item = document.createElement('div');
+    item.className = 'feat-item ' + (value ? 'yes' : 'no');
+    const icon = document.createElement('span');
+    icon.className = 'feat-icon';
+    icon.textContent = value ? '✅' : '❌';
+    const lbl = document.createElement('span');
+    lbl.className = 'feat-label';
+    lbl.textContent = label;
+    item.appendChild(icon);
+    item.appendChild(lbl);
+    grid.appendChild(item);
+    if (value) yes++;
+  }
+  if (scoreEl) {
+    const el = $(scoreEl);
+    if (el) el.textContent = `${yes}/${entries.length}`;
+  }
+}
+
+function fillCssSupports(features) {
+  if (!features) return;
+  const CSS_LABELS = {
+    grid_subgrid:        'Grid Subgrid',
+    container_queries:   'Container Queries',
+    color_mix:           'color-mix()',
+    has_selector:        ':has() selector',
+    dvh_units:           'dvh units',
+    logical_properties:  'Логические свойства',
+    oklch_color:         'oklch()',
+    p3_color:            'display-p3',
+    cascade_layers:      'Cascade Layers (@layer)',
+    scroll_timeline:     'Scroll Timeline',
+    anchor_positioning:  'Anchor Positioning',
+    nesting:             'CSS Nesting',
+  };
+  const entries = Object.entries(features).map(([k, v]) => [CSS_LABELS[k] || k, !!v]);
+  fillFeatureGrid('css-features-grid', entries, 'css-fp-score');
+}
+
+function fillExtendedApis(apis) {
+  if (!apis) return;
+  const API_LABELS = {
+    bluetooth:          'Bluetooth API',
+    usb:                'WebUSB',
+    serial:             'Web Serial',
+    hid:                'WebHID',
+    nfc:                'Web NFC',
+    keyboard:           'Keyboard API',
+    contacts:           'Contacts API',
+    presentation:       'Presentation API',
+    wake_lock:          'Wake Lock',
+    scheduling:         'Scheduling API',
+    ink:                'Ink API',
+    gamepads:           'Gamepad API',
+    midi:               'Web MIDI',
+    file_system_access: 'File System Access',
+    eye_dropper:        'EyeDropper',
+    screen_capture:     'Screen Capture',
+    window_management:  'Window Management',
+  };
+  const entries = Object.entries(apis).map(([k, v]) => [API_LABELS[k] || k, !!v]);
+  fillFeatureGrid('ext-apis-grid', entries, null);
+}
+
 async function sendCollect(visitId, client, score, risk, server) {
   try {
     const res = await fetch('./collect.php', {
@@ -1807,13 +2159,14 @@ async function loadAll() {
       xContentTypeOptions: apiRes.headers.get('x-content-type-options') || '',
       crossOriginResourcePolicy: apiRes.headers.get('cross-origin-resource-policy') || '',
     };
-    const [apiData, client, perms, quota, swInfo, adblock] = await Promise.all([
+    const [apiData, client, perms, quota, swInfo, adblock, ipv6result] = await Promise.all([
       apiRes.json(),
       collectClientSignals(),
       getBrowserPermissions(),
       getStorageQuota(),
       getServiceWorkerInfo(),
       detectAdBlock(),
+      detectIPv6(),
     ]);
     currentVisitId = apiData.visit_id || null;
     const server = apiData.client || {};
@@ -1841,6 +2194,11 @@ async function loadAll() {
     fillRiskCategories(cats);
     fillRecommendations(recs);
     fillBrowserComparison(comparison);
+    fillHttpHeaders(server.all_request_headers || {});
+    fillIPv6Test(server.ip, server.client_ip_version, ipv6result);
+    fillWebGLDetailed(client.webgl_detailed || null);
+    fillCssSupports(client.css_supports || null);
+    fillExtendedApis(client.extended_apis || null);
 
     const combined = {
       timestamp_iso8601: apiData.timestamp_iso8601,
@@ -1882,6 +2240,11 @@ async function loadAll() {
           banner.style.display = 'block';
         }
       }
+      fillFingerprintUniqueness(collectResult?.uniqueness ?? null, client.fingerprint_hash);
+      fillVisitTimeline(collectResult?.visit_timeline ?? []);
+    } else {
+      fillFingerprintUniqueness(null, client.fingerprint_hash);
+      fillVisitTimeline([]);
     }
   } catch (err) {
     console.error(err);

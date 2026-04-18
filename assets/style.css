@@ -56,3 +56,19 @@ canvas.sparkline{width:100%;height:36px;display:block;border-radius:6px}
 .stability-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;margin-bottom:8px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02);font-size:12px}
 .stability-label{color:var(--muted)}
 .stability-row strong{font-size:18px;font-weight:700}
+/* === v10 — new features === */
+/* Visit timeline */
+.timeline-list{display:grid;gap:8px}
+.timeline-item{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:rgba(255,255,255,.02);font-size:12px}
+.timeline-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.timeline-dot.same{background:var(--green)}.timeline-dot.diff{background:var(--yellow)}
+.timeline-meta{flex:1;min-width:0}
+.timeline-date{color:var(--muted);font-size:11px}
+.timeline-ip{font-family:var(--mono);font-size:12px;word-break:break-all}
+/* Feature grid (CSS supports / Extended APIs) */
+.feature-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px}
+.feat-item{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:10px;padding:6px 9px;background:rgba(255,255,255,.02);font-size:12px}
+.feat-item .feat-icon{font-size:13px;flex-shrink:0}
+.feat-item .feat-label{flex:1;min-width:0;word-break:break-word;color:var(--muted)}
+.feat-item.yes .feat-label{color:var(--text)}
+.feat-item.no .feat-label{opacity:.55}

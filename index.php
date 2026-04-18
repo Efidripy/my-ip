@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KLEVA My-IP PRO</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="assets/style.css?v=9">
-  <script defer src="assets/app.js?v=9"></script>
+  <link rel="stylesheet" href="assets/style.css?v=10">
+  <script defer src="assets/app.js?v=10"></script>
 </head>
 <body>
   <div class="bg-glow"></div>
@@ -190,6 +190,34 @@
           </div>
           <div id="drift-list" class="drift-list">
             <div class="empty">Собираем…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Уникальность fingerprint</h2>
+              <p>Сколько сессий с таким же отпечатком видела наша база — трекинг без cookies.</p>
+            </div>
+            <span class="pill subtle" id="fp-unique-pill">—</span>
+          </div>
+          <div class="kv-grid">
+            <div class="kv"><span>Сессий с этим FP</span><strong id="fp-uniq-sessions">—</strong></div>
+            <div class="kv"><span>Уникальных IP</span><strong id="fp-uniq-ips">—</strong></div>
+            <div class="kv"><span>Уникальность</span><strong id="fp-uniq-level">—</strong></div>
+            <div class="kv"><span>Fingerprint hash</span><strong class="mono" id="fp-uniq-hash">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>История визитов</h2>
+              <p>Последние сессии с этим fingerprint — трекинг без cookies в действии.</p>
+            </div>
+          </div>
+          <div id="visit-timeline" class="timeline-list">
+            <div class="empty">Ожидание данных сервера…</div>
           </div>
         </section>
 
@@ -410,6 +438,72 @@
           </div>
           <div id="compare-grid" class="compare-grid">
             <div class="empty">Анализируем…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>IPv6 Leak Test</h2>
+              <p>Проверяем, раскрывает ли браузер IPv6-адрес при подключении через IPv4-VPN.</p>
+            </div>
+            <span class="pill subtle" id="ipv6-pill">—</span>
+          </div>
+          <div class="kv-grid">
+            <div class="kv"><span>IP (основной)</span><strong class="mono" id="ipv6-main-ip">—</strong></div>
+            <div class="kv"><span>IP (через ipv6-endpoint)</span><strong class="mono" id="ipv6-detected">—</strong></div>
+            <div class="kv"><span>Версия (основной)</span><strong id="ipv6-main-ver">—</strong></div>
+            <div class="kv"><span>Версия (endpoint)</span><strong id="ipv6-ep-ver">—</strong></div>
+            <div class="kv"><span>Статус</span><strong id="ipv6-status">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>HTTP Headers зеркало</h2>
+              <p>Все заголовки, которые видит сервер — по ним строится отпечаток HTTP-стека.</p>
+            </div>
+          </div>
+          <div id="http-headers-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>WebGL детально</h2>
+              <p>Расширенный профиль GPU — один из самых стабильных идентификаторов устройства.</p>
+            </div>
+          </div>
+          <div id="webgl-detailed-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>CSS Feature Fingerprint</h2>
+              <p>Поддержка современных CSS-фич уникальна для каждой версии браузера.</p>
+            </div>
+            <span class="pill subtle" id="css-fp-score">—</span>
+          </div>
+          <div id="css-features-grid" class="feature-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Расширенные Web API</h2>
+              <p>Наличие привилегированных API раскрывает тип устройства и ОС точнее UA.</p>
+            </div>
+          </div>
+          <div id="ext-apis-grid" class="feature-grid">
+            <div class="empty">Загрузка…</div>
           </div>
         </section>
 

@@ -52,10 +52,30 @@ try {
                 'same_ip'  => (string)$prev['ip'] === $currentIp,
             ];
         }
+
+        // Fingerprint uniqueness: how many sessions / unique IPs share this hash
+        $uStmt = $pdo->prepare(
+            'SELECT COUNT(*) as total_sessions, COUNT(DISTINCT ip) as unique_ips FROM visits WHERE client_hash = :hash'
+        );
+        $uStmt->execute([':hash' => $clientHash]);
+        $uRow = $uStmt->fetch();
+        if ($uRow) {
+            $uniqueness = [
+                'total_sessions' => (int)$uRow['total_sessions'],
+                'unique_ips'     => (int)$uRow['unique_ips'],
+            ];
+        }
+
+        // Last 10 visits with this hash for timeline display
+        $tlStmt = $pdo->prepare(
+            'SELECT created_at, ip, geo_country, geo_city FROM visits WHERE client_hash = :hash ORDER BY created_at DESC LIMIT 10'
+        );
+        $tlStmt->execute([':hash' => $clientHash]);
+        $visitTimeline = $tlStmt->fetchAll() ?: [];
     }
 } catch (Throwable $e) {
     error_log('collect.php: ' . $e->getMessage());
     json_response(['ok' => false, 'error' => 'internal_error'], 500);
 }
 
-json_response(['ok' => true, 'prev_visit' => $prevVisit]);
+json_response(['ok' => true, 'prev_visit' => $prevVisit, 'uniqueness' => $uniqueness ?? null, 'visit_timeline' => $visitTimeline ?? []]);
