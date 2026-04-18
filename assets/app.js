@@ -193,7 +193,6 @@ async function detectWebRTC() {
   return new Promise(async (resolve) => {
     const ips = new Set(), mdns = new Set();
     const proxyPorts = new Set();
-    const PROXY_PORTS = new Set([1080, 3128, 8080, 8888, 9050, 9150, 1194, 4145]);
     try {
       const pc = new RTCPeer({ iceServers: [] });
       pc.createDataChannel('x');
@@ -560,6 +559,7 @@ function calculateScoreBreakdown(server, client, leaks) {
 const MAX_SAFE_LANGUAGES = 2;
 const BREAKDOWN_BAR_SCALE = 5.5;
 const MAX_SCORE_HISTORY = 20;
+const PROXY_PORTS = new Set([1080, 3128, 8080, 8888, 9050, 9150, 1194, 4145]);
 function renderBreakdown(items) {
   const grid = $('breakdown-grid');
   if (!grid) return;
@@ -893,7 +893,15 @@ async function loadAll() {
         const { days_ago, same_ip } = collectResult.prev_visit;
         const banner = $('prev-visit-banner');
         if (banner) {
-          const daysText = days_ago === 0 ? 'сегодня' : days_ago === 1 ? '1 день назад' : `${days_ago} дней назад`;
+          const ruDays = (n) => {
+            const m = n % 100;
+            if (m >= 11 && m <= 14) return `${n} дней`;
+            const r = n % 10;
+            if (r === 1) return `${n} день`;
+            if (r >= 2 && r <= 4) return `${n} дня`;
+            return `${n} дней`;
+          };
+          const daysText = days_ago === 0 ? 'сегодня' : `${ruDays(days_ago)} назад`;
           const ipText = same_ip ? 'с того же IP' : 'с другого IP';
           const p = document.createElement('p');
           p.textContent = `🔍 Мы уже видели тебя ${daysText} (${ipText}). Fingerprint совпал — трекинг работает без cookies.`;

@@ -41,7 +41,7 @@ try {
     if ($clientHash !== '') {
         $currentIp = get_client_ip();
         $prevStmt = $pdo->prepare(
-            'SELECT id, created_at, ip FROM visits WHERE client_hash = :hash AND id != :id AND client_hash != \'\' ORDER BY created_at DESC LIMIT 1'
+            'SELECT id, created_at, ip FROM visits WHERE client_hash = :hash AND id != :id ORDER BY created_at DESC LIMIT 1'
         );
         $prevStmt->execute([':hash' => $clientHash, ':id' => $visitId]);
         $prev = $prevStmt->fetch();
