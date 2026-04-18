@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KLEVA My-IP PRO</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="assets/style.css?v=5">
-  <script defer src="assets/app.js?v=5"></script>
+  <link rel="stylesheet" href="assets/style.css?v=6">
+  <script defer src="assets/app.js?v=6"></script>
 </head>
 <body>
   <div class="bg-glow"></div>
@@ -23,6 +23,8 @@
         <div class="pill">Обновлено: <span id="updated-at">—</span></div>
       </div>
     </header>
+
+    <div id="prev-visit-banner" class="prev-visit-banner" style="display:none"></div>
 
     <section class="grid">
       <div class="left-col">
@@ -132,6 +134,7 @@
             <div class="kv"><span>Гео timezone</span><strong id="kv-geo-tz">—</strong></div>
             <div class="kv"><span>ASN org</span><strong id="kv-org">—</strong></div>
             <div class="kv"><span>Tor</span><strong id="kv-tor">—</strong></div>
+            <div class="kv"><span>DNSBL</span><strong id="kv-dnsbl">—</strong></div>
           </div>
         </section>
       </div>
@@ -165,6 +168,12 @@
             <div class="kv"><span>Audio hash</span><strong class="mono" id="fp-audio">—</strong></div>
             <div class="kv"><span>WebGL</span><strong id="fp-webgl">—</strong></div>
             <div class="kv"><span>Fingerprint hash</span><strong class="mono" id="fp-hash">—</strong></div>
+            <div class="kv"><span>Incognito</span><strong id="fp-incognito">—</strong></div>
+            <div class="kv"><span>Battery</span><strong id="fp-battery">—</strong></div>
+            <div class="kv"><span>Network</span><strong id="fp-network">—</strong></div>
+            <div class="kv"><span>System locale</span><strong id="fp-locale">—</strong></div>
+            <div class="kv"><span>Fonts found</span><strong id="fp-fonts-count">—</strong></div>
+            <div class="kv"><span>UA brands</span><strong id="fp-ua-brands">—</strong></div>
           </div>
         </section>
 
@@ -180,6 +189,7 @@
             <div class="kv"><span>Local candidates</span><strong class="mono" id="webrtc-local">—</strong></div>
             <div class="kv"><span>Public candidates</span><strong class="mono" id="webrtc-public">—</strong></div>
             <div class="kv"><span>mDNS candidates</span><strong class="mono" id="webrtc-mdns">—</strong></div>
+            <div class="kv"><span>Proxy ports</span><strong class="mono" id="webrtc-proxy-ports">—</strong></div>
           </div>
         </section>
 
