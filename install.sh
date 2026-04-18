@@ -164,10 +164,14 @@ NGINX_LOC
 
     cat > "$SNIPPET_PHP" <<NGINX_PHP
 # KLEVA My-IP PRO — PHP handler (sub-path)
+# NOTE: we do NOT use "include snippets/fastcgi-php.conf" here because that
+# snippet contains "try_files \$fastcgi_script_name =404" which resolves against
+# \$document_root (the server root, e.g. /var/www/kleva.ru) rather than the
+# aliased app directory, producing a false 404 for every PHP request.
 location ~ ^/${STRIPPED}/(.+\.php)$ {
-    fastcgi_split_path_info ^((?U).+\.php)(/.+)$;
-    include snippets/fastcgi-php.conf;
+    include fastcgi_params;
     fastcgi_param SCRIPT_FILENAME ${INSTALL_DIR}/\$1;
+    fastcgi_param SCRIPT_NAME /${STRIPPED}/\$1;
     fastcgi_param HTTP_X_REAL_IP \$remote_addr;
     fastcgi_param HTTP_X_FORWARDED_FOR \$proxy_add_x_forwarded_for;
     fastcgi_pass unix:${FPM_SOCK};

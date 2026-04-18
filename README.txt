@@ -87,10 +87,13 @@ KLEVA My-IP PRO
   }
 
   # my-ip-php.conf
+  # IMPORTANT: do NOT use "include snippets/fastcgi-php.conf" here — it contains
+  # "try_files $fastcgi_script_name =404" which checks against the server $document_root
+  # (e.g. /var/www/kleva.ru), not the aliased app directory, causing false 404 errors.
   location ~ ^/my-ip/(.+\.php)$ {
-      fastcgi_split_path_info ^((?U).+\.php)(/.+)$;
-      include snippets/fastcgi-php.conf;
+      include fastcgi_params;
       fastcgi_param SCRIPT_FILENAME /var/www/my-ip/$1;
+      fastcgi_param SCRIPT_NAME /my-ip/$1;
       fastcgi_param HTTP_X_REAL_IP $remote_addr;
       fastcgi_param HTTP_X_FORWARDED_FOR $proxy_add_x_forwarded_for;
       fastcgi_pass unix:/run/php/php-fpm.sock;
