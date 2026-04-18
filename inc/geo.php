@@ -17,7 +17,7 @@ function mmdb_lookup_value(string $dbFile, string $ip, array $path): ?string {
     }
     $safePath = [];
     foreach ($path as $part) {
-        if (!is_string($part) || !preg_match('/^[a-zA-Z0-9_-]+$/', $part)) {
+        if (!is_string($part) || !preg_match('/^[a-zA-Z0-9_]+$/', $part)) {
             return null;
         }
         $safePath[] = $part;

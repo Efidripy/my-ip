@@ -29,10 +29,11 @@ for ($i = 13; $i >= 0; $i--) {
 foreach ($chartRows as $r) {
     $chartByDay[$r['day']] = ['cnt' => (int)$r['cnt'], 'avg_score' => (int)$r['avg_score']];
 }
-$chartJson = json_encode(array_map(
-    fn($d, $v) => ['day' => substr($d, 5), 'cnt' => $v['cnt'], 'avg_score' => $v['avg_score']],
-    array_keys($chartByDay), $chartByDay
-));
+$chartData = [];
+foreach ($chartByDay as $d => $v) {
+    $chartData[] = ['day' => substr($d, 5), 'cnt' => $v['cnt'], 'avg_score' => $v['avg_score']];
+}
+$chartJson = json_encode($chartData);
 
 $rows = $pdo->query('SELECT * FROM visits ORDER BY created_at DESC LIMIT 200')->fetchAll();
 $tok  = h((string)($_GET['token'] ?? ''));

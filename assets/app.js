@@ -203,7 +203,7 @@ function calculateScoreBreakdown(server, client, leaks) {
     { check: server.referer_present,                         name: 'Referer заголовок',       pts: 5 },
     { check: server.origin_present,                          name: 'Origin заголовок',        pts: 4 },
     { check: server.sec_ch_ua_present,                       name: 'Client Hints',            pts: 3 },
-    { check: client.languages && client.languages.length > 2,
+    { check: (client.languages?.length ?? 0) > 2,
       name: `Много языков (${client.languages?.length ?? 0})`, pts: 3 },
   ];
   for (const e of extras) {
@@ -279,19 +279,25 @@ function _getHist() {
 }
 function renderSparkline(canvasId, scores) {
   const canvas = document.getElementById(canvasId);
-  if (!canvas || !canvas.getContext || scores.length < 2) {
+  if (!canvas || !canvas.getContext) {
     if (canvas) canvas.style.display = 'none';
     return;
   }
+  const ctx2d = canvas.getContext('2d');
+  if (!ctx2d) {
+    canvas.style.display = 'none';
+    return;
+  }
+  if (scores.length < 2) { canvas.style.display = 'none'; return; }
   canvas.style.display = 'block';
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.offsetWidth || 220;
   const H = 48;
   canvas.width = W * dpr;
   canvas.height = H * dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, W, H);
+  ctx2d.scale(dpr, dpr);
+  ctx2d.clearRect(0, 0, W, H);
+  const ctx = ctx2d;
   const pad = 5;
   const uw = W - pad * 2, uh = H - pad * 2;
   const pts = scores.map((s, i) => [pad + (i / (scores.length - 1)) * uw, pad + (1 - s / 100) * uh]);
