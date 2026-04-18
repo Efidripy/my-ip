@@ -90,19 +90,178 @@ function getWebGLInfo() {
       ? `${gl.getParameter(ext.UNMASKED_VENDOR_WEBGL)} / ${gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)}`
       : 'available';
     const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-    const vp = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
-    const precV = gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_FLOAT);
-    const precF = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
     const exts = (gl.getSupportedExtensions() || []).length;
     return {
       renderer,
       max_texture_size: maxTex || null,
-      max_viewport: vp ? `${vp[0]} × ${vp[1]}` : null,
-      vertex_precision: precV ? precV.precision : null,
-      fragment_precision: precF ? precF.precision : null,
       extensions_count: exts,
     };
   } catch { return { renderer: 'unsupported' }; }
+}
+
+function getWebGLDetailedInfo() {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (!gl) return null;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const anisExt = gl.getExtension('EXT_texture_filter_anisotropic');
+    const allExt = gl.getSupportedExtensions() || [];
+    const vf = gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_FLOAT);
+    const ff = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+    const NOTABLE = ['EXT_color_buffer_float','OES_texture_float','WEBGL_depth_texture',
+                     'OES_standard_derivatives','ANGLE_instanced_arrays','EXT_disjoint_timer_query',
+                     'WEBGL_debug_renderer_info','OES_vertex_array_object'];
+    return {
+      vendor:               ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : null,
+      renderer:             ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'available',
+      version:              gl.getParameter(gl.VERSION),
+      shading_language:     gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+      max_texture_size:     gl.getParameter(gl.MAX_TEXTURE_SIZE),
+      max_renderbuffer:     gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),
+      max_cube_map:         gl.getParameter(gl.MAX_CUBE_MAP_TEXTURE_SIZE),
+      max_anisotropy:       anisExt ? gl.getParameter(anisExt.MAX_TEXTURE_MAX_ANISOTROPY_EXT) : null,
+      vertex_precision:     vf ? vf.precision : null,
+      fragment_precision:   ff ? ff.precision : null,
+      extensions_count:     allExt.length,
+      extensions_notable:   allExt.filter(e => NOTABLE.includes(e)),
+    };
+  } catch { return null; }
+}
+
+function getCssSupportFeatures() {
+  const sup = (q) => { try { return CSS.supports(q); } catch { return false; } };
+  return {
+    grid_subgrid:        sup('grid-template-rows: subgrid'),
+    container_queries:   sup('container-type: inline-size'),
+    color_mix:           sup('color: color-mix(in srgb, red, blue)'),
+    has_selector:        sup('selector(:has(a))'),
+    dvh_units:           sup('height: 1dvh'),
+    logical_properties:  sup('margin-inline: 0'),
+    oklch_color:         sup('color: oklch(50% 0.2 120)'),
+    p3_color:            sup('color: color(display-p3 1 0 0)'),
+    cascade_layers:      typeof CSSLayerBlockRule !== 'undefined',
+    scroll_timeline:     sup('animation-timeline: scroll()'),
+    anchor_positioning:  sup('anchor-name: --foo'),
+    nesting:             sup('& { color: red }'),
+  };
+}
+
+function getSystemColors() {
+  try {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:absolute;left:-9999px;visibility:hidden';
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    wrap.appendChild(chk);
+
+    const sel = document.createElement('select');
+    const opt = document.createElement('option');
+    opt.textContent = 'x';
+    sel.appendChild(opt);
+    wrap.appendChild(sel);
+
+    const btn = document.createElement('button');
+    btn.textContent = 'x';
+    wrap.appendChild(btn);
+
+    document.body.appendChild(wrap);
+    const chkSt = getComputedStyle(chk);
+    const selSt = getComputedStyle(sel);
+    const btnSt = getComputedStyle(btn);
+    const result = {
+      accent_color:       chkSt.accentColor || null,
+      color_scheme:       getComputedStyle(document.documentElement).colorScheme || null,
+      checkbox_bg:        chkSt.backgroundColor || null,
+      checkbox_border:    chkSt.borderColor || null,
+      select_bg:          selSt.backgroundColor || null,
+      select_color:       selSt.color || null,
+      button_bg:          btnSt.backgroundColor || null,
+      button_border:      btnSt.borderColor || null,
+      scrollbar_color:    getComputedStyle(document.documentElement).scrollbarColor || null,
+    };
+    document.body.removeChild(wrap);
+    return result;
+  } catch { return null; }
+}
+
+function getExtendedApis() {
+  const has = (obj, key) => !!(obj && key in obj);
+  return {
+    bluetooth:             has(navigator, 'bluetooth'),
+    usb:                   has(navigator, 'usb'),
+    serial:                has(navigator, 'serial'),
+    hid:                   has(navigator, 'hid'),
+    nfc:                   has(navigator, 'nfc'),
+    keyboard:              has(navigator, 'keyboard'),
+    contacts:              has(navigator, 'contacts'),
+    presentation:          has(navigator, 'presentation'),
+    wake_lock:             has(navigator, 'wakeLock'),
+    scheduling:            has(navigator, 'scheduling'),
+    ink:                   has(navigator, 'ink'),
+    gamepads:              typeof navigator.getGamepads === 'function',
+    midi:                  has(navigator, 'requestMIDIAccess'),
+    file_system_access:    typeof window.showOpenFilePicker === 'function',
+    eye_dropper:           typeof window.EyeDropper !== 'undefined',
+    screen_capture:        has(navigator.mediaDevices || {}, 'getDisplayMedia'),
+    window_management:     typeof window.getScreenDetails === 'function',
+  };
+}
+
+function getMathFingerprint() {
+  try {
+    return {
+      tan:   Math.tan(-1e300),
+      sin:   Math.sin(Math.PI),
+      cos:   Math.cos(Math.PI),
+      acos:  Math.acos(0.123456789),
+      atan2: Math.atan2(90, 15),
+      exp:   Math.exp(1),
+      log:   Math.log(Math.PI),
+      sinh:  Math.sinh(1),
+      cosh:  Math.cosh(1),
+      tanh:  Math.tanh(1),
+      sqrt2: Math.SQRT2,
+    };
+  } catch { return null; }
+}
+
+async function getSpeechVoices() {
+  try {
+    if (!window.speechSynthesis) return null;
+    let voices = window.speechSynthesis.getVoices();
+    if (!voices.length) {
+      await new Promise((res) => {
+        const tid = setTimeout(res, 500);
+        window.speechSynthesis.onvoiceschanged = () => { clearTimeout(tid); res(); };
+      });
+      voices = window.speechSynthesis.getVoices();
+    }
+    return {
+      count: voices.length,
+      sample: voices.slice(0, 6).map(v => v.name),
+      langs: [...new Set(voices.map(v => v.lang).filter(Boolean))].slice(0, 8),
+    };
+  } catch { return null; }
+}
+
+function getPluginsInfo() {
+  try {
+    const plugins = Array.from(navigator.plugins || []);
+    return {
+      count: plugins.length,
+      names: plugins.slice(0, 6).map(p => p.name).filter(Boolean),
+    };
+  } catch { return null; }
+}
+
+async function detectIPv6() {
+  try {
+    const res = await fetch('./ipv6.php', { cache: 'no-store' });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
 }
 
 function detectFonts() {
@@ -310,11 +469,12 @@ async function detectWebRTC() {
       pc.createDataChannel('x');
       pc.onicecandidate = (e) => {
         if (!e.candidate || !e.candidate.candidate) return;
-        const cand = e.candidate.candidate;
-        const m = cand.match(/([0-9]{1,3}(?:\.[0-9]{1,3}){3}|[a-f0-9:]+|[a-z0-9-]+\.local)\s+(\d+)/i);
-        if (!m) return;
-        const v = m[1];
-        const port = parseInt(m[2], 10);
+        // SDP candidate format: candidate:<foundation> <component> <transport> <priority> <address> <port> typ ...
+        const parts = e.candidate.candidate.split(' ');
+        if (parts.length < 6) return;
+        const v = parts[4];
+        const port = parseInt(parts[5], 10);
+        if (!v || isNaN(port)) return;
         if (!isNaN(port) && PROXY_PORTS.has(port)) proxyPorts.add(port);
         if (v.endsWith('.local')) mdns.add(v); else ips.add(v);
       };
@@ -349,7 +509,7 @@ async function collectClientSignals() {
   const gpc = navigator.globalPrivacyControl ?? null;
   const storage_state = getStorageState();
   const cookie_test = testCookiePolicy();
-  const [audio, webrtc, battery, incognito, media_devices, audio_ctx_details, client_hints] = await Promise.all([
+  const [audio, webrtc, battery, incognito, media_devices, audio_ctx_details, client_hints, speech_voices] = await Promise.all([
     audioHash(),
     detectWebRTC(),
     getBatteryInfo(),
@@ -357,6 +517,7 @@ async function collectClientSignals() {
     getMediaDevicesCount(),
     getAudioContextDetails(),
     getFullClientHints(),
+    getSpeechVoices(),
   ]);
 
   const client = {
@@ -380,7 +541,6 @@ async function collectClientSignals() {
     canvas_hash: await sha256(canvas),
     audio_hash: await sha256(String(audio)),
     webgl,
-    fonts,
     fonts_count: fonts.length,
     battery,
     network,
@@ -399,6 +559,14 @@ async function collectClientSignals() {
     storage_state,
     cookie_test,
     client_hints,
+    css_supports: getCssSupportFeatures(),
+    system_colors: getSystemColors(),
+    webgl_detailed: getWebGLDetailedInfo(),
+    extended_apis: getExtendedApis(),
+    math_fp: getMathFingerprint(),
+    speech_voices: speech_voices,
+    plugins: getPluginsInfo(),
+    fonts_list: fonts.slice(0, 12),
   };
   const fpSource = JSON.stringify([
     client.browser, client.os, client.device, client.engine,
@@ -762,18 +930,18 @@ function calculateScoreBreakdown(server, client, leaks) {
   const items = [];
   let score = 100;
   for (const l of leaks) {
-    const pts = l.level === 'red' ? 18 : l.level === 'yellow' ? 8 : 2;
+    const pts = getDeductionByLevel(l.level);
     score -= pts;
     items.push({ name: l.title, deduction: pts, level: l.level });
   }
   const extras = [
-    { check: !server.dnt,                                    name: 'Нет DNT заголовка',      pts: 4 },
-    { check: client.cookie_enabled,                          name: 'Cookies включены',        pts: 4 },
-    { check: server.referer_present,                         name: 'Referer заголовок',       pts: 5 },
-    { check: server.origin_present,                          name: 'Origin заголовок',        pts: 4 },
-    { check: server.sec_ch_ua_present,                       name: 'Client Hints',            pts: 3 },
+    { check: !server.dnt,                                    name: 'Нет DNT заголовка',      pts: 2 },
+    { check: client.cookie_enabled,                          name: 'Cookies включены',        pts: 2 },
+    { check: server.referer_present,                         name: 'Referer заголовок',       pts: 2 },
+    { check: server.origin_present,                          name: 'Origin заголовок',        pts: 2 },
+    { check: server.sec_ch_ua_present,                       name: 'Client Hints',            pts: 1 },
     { check: (client.languages?.length ?? 0) > MAX_SAFE_LANGUAGES,
-      name: `Много языков (${client.languages?.length ?? 0})`, pts: 3 },
+      name: `Много языков (${client.languages?.length ?? 0})`, pts: 1 },
   ];
   for (const e of extras) {
     if (e.check) { score -= e.pts; items.push({ name: e.name, deduction: e.pts, level: 'yellow' }); }
@@ -786,6 +954,13 @@ const MAX_SAFE_LANGUAGES = 2;
 const BREAKDOWN_BAR_SCALE = 5.5;
 const MAX_SCORE_HISTORY = 20;
 const PROXY_PORTS = new Set([1080, 3128, 8080, 8888, 9050, 9150, 1194, 4145]);
+const RISK_GREEN_THRESHOLD = 75;
+const RISK_YELLOW_THRESHOLD = 45;
+const LEVEL_DEDUCTIONS = Object.freeze({ red: 14, yellow: 5, green: 1 });
+
+function getDeductionByLevel(level) {
+  return LEVEL_DEDUCTIONS[level] ?? LEVEL_DEDUCTIONS.yellow;
+}
 function renderBreakdown(items) {
   const grid = $('breakdown-grid');
   if (!grid) return;
@@ -903,13 +1078,13 @@ function renderSparkline(canvasId, scores) {
   const last = pts[pts.length - 1], ls = scores[scores.length - 1];
   ctx.beginPath();
   ctx.arc(last[0], last[1], 3, 0, Math.PI * 2);
-  ctx.fillStyle = ls >= 80 ? '#7cf29a' : ls >= 55 ? '#ffd166' : '#ff6b6b';
+  ctx.fillStyle = ls >= RISK_GREEN_THRESHOLD ? '#7cf29a' : ls >= RISK_YELLOW_THRESHOLD ? '#ffd166' : '#ff6b6b';
   ctx.fill();
 }
 
 function explainScore(score) {
-  if (score >= 80) return 'Профиль относительно аккуратный: сигналы есть, но без жёстких утечек.';
-  if (score >= 55) return 'Средний уровень палевности: обычный сайт и трекер увидят о тебе уже довольно много.';
+  if (score >= RISK_GREEN_THRESHOLD) return 'Профиль относительно аккуратный: есть отдельные сигналы, но без критичных утечек.';
+  if (score >= RISK_YELLOW_THRESHOLD) return 'Умеренный уровень палевности: часть сигналов заметна, но это ещё не максимальный риск.';
   return 'Шумный профиль: адрес, fingerprint и дополнительные сигналы делают тебя хорошо различимым.';
 }
 
@@ -1056,6 +1231,7 @@ function fillClientDetails(server, client) {
   setText('fp-network', client.network?.effective_type || client.network?.type || '—');
   setText('fp-locale', client.system_locale ? `${client.system_locale.number} / ${client.system_locale.collator}` : '—');
   setText('fp-fonts-count', client.fonts_count != null ? String(client.fonts_count) : '—');
+  setText('fp-fonts-list', (client.fonts_list || []).join(', ') || '—');
   setText('fp-ua-brands', (client.ua_brands || []).join(', ') || '—');
 
   // Headless / automation signals
@@ -1526,7 +1702,8 @@ function buildBrowserComparison(client, server, adblock, gpc, perms) {
 // NEW RENDERING FUNCTIONS — v7
 // ============================================================
 
-function fillUaCh(hints, uaConsistency) {
+function fillUaCh(hints, uaConsistency, secChUaHeader) {
+  setText('ua-ch-sec-header', secChUaHeader || '—');
   if (!hints) {
     setText('ua-ch-status', 'Не доступно (нужен HTTPS и Chromium-браузер)');
     return;
@@ -1589,10 +1766,10 @@ function fillStorageState(state, quota, swInfo) {
 
 function fillNetworkPrivacy(server, client, adblock, cookieTest, gpcJs, respHeaders) {
   setText('np-gpc-server', server.sec_gpc ? `🟢 Отправляет (Sec-GPC: ${server.sec_gpc})` : '🔴 Заголовок не отправлен');
-  setText('np-gpc-js', gpcJs != null ? (gpcJs ? '🟢 Активен' : '🔴 Выключен') : '— Не поддерживается');
+  setText('np-gpc-js', gpcJs != null ? (gpcJs ? '🟢 Активен' : '🔴 Выключен') : '—');
   setText('np-adblock', adblock?.detected === true ? '🟢 Обнаружен' : adblock?.detected === false ? '🔴 Не обнаружен' : '—');
   setText('np-cookie-test', cookieTest ? (cookieTest.first_party_ok ? '✅ First-party cookies: OK' : '❌ First-party cookies: заблокированы') : '—');
-  setText('np-referrer-policy', respHeaders.referrerPolicy || '— (заголовок не задан)');
+  setText('np-referrer-policy', respHeaders.referrerPolicy || '—');
   setText('np-ip-version', server.client_ip_version || '—');
   const c = client.network;
   setText('np-net-type', c ? (c.effective_type || c.type || '—') : '—');
@@ -1602,25 +1779,25 @@ function fillNetworkPrivacy(server, client, adblock, cookieTest, gpcJs, respHead
 }
 
 function fillSecFetch(server) {
-  setText('sf-site', server.sec_fetch_site || '— (не отправлен)');
+  setText('sf-site', server.sec_fetch_site || '—');
   setText('sf-mode', server.sec_fetch_mode || '—');
   setText('sf-dest', server.sec_fetch_dest || '—');
   setText('sf-user', server.sec_fetch_user || '—');
   setText('sf-gpc', server.sec_gpc || '—');
-  setText('sf-tls', server.tls_version || '— (nginx не передаёт SSL_PROTOCOL в fastcgi)');
+  setText('sf-tls', server.tls_version || '—');
   setText('sf-cipher', server.tls_cipher || '—');
   setText('sf-http-proto', server.http_version || '—');
 }
 
 function fillPageSecurity(respHeaders) {
-  setText('sec-csp', respHeaders.csp || '— не задан');
-  setText('sec-coop', respHeaders.coop || '— не задан');
-  setText('sec-coep', respHeaders.coep || '— не задан');
-  setText('sec-xfo', respHeaders.xfo || '— не задан');
-  setText('sec-hsts', respHeaders.hsts || '— не задан');
-  setText('sec-pp', respHeaders.permissionsPolicy || '— не задан');
-  setText('sec-xcto', respHeaders.xContentTypeOptions || '— не задан');
-  setText('sec-corp', respHeaders.crossOriginResourcePolicy || '— не задан');
+  setText('sec-csp', respHeaders.csp || '—');
+  setText('sec-coop', respHeaders.coop || '—');
+  setText('sec-coep', respHeaders.coep || '—');
+  setText('sec-xfo', respHeaders.xfo || '—');
+  setText('sec-hsts', respHeaders.hsts || '—');
+  setText('sec-pp', respHeaders.permissionsPolicy || '—');
+  setText('sec-xcto', respHeaders.xContentTypeOptions || '—');
+  setText('sec-corp', respHeaders.crossOriginResourcePolicy || '—');
 }
 
 function fillDriftHistory(drift) {
@@ -1671,7 +1848,7 @@ function fillRiskCategories(cats) {
   for (const [, cat] of Object.entries(cats)) {
     if (cat.items.length === 0) continue;
     hasAny = true;
-    const total = cat.items.reduce((s, l) => s + (l.level === 'red' ? 18 : l.level === 'yellow' ? 8 : 2), 0);
+    const total = cat.items.reduce((s, l) => s + getDeductionByLevel(l.level), 0);
     const div = document.createElement('div');
     div.className = 'cat-block';
     const h = document.createElement('div');
@@ -1767,6 +1944,348 @@ function setupExportButtons(getJson) {
   }
 }
 
+// ============================================================
+// NEW RENDERING FUNCTIONS — v10
+// ============================================================
+
+function fillSystemColors(colors) {
+  const grid = $('system-colors-grid');
+  if (!grid) return;
+  if (!colors) { grid.innerHTML = '<div class="empty">—</div>'; return; }
+  grid.replaceChildren();
+  const rows = [
+    ['Accent color', colors.accent_color],
+    ['Color scheme', colors.color_scheme],
+    ['Checkbox bg', colors.checkbox_bg],
+    ['Checkbox border', colors.checkbox_border],
+    ['Select bg', colors.select_bg],
+    ['Select color', colors.select_color],
+    ['Button bg', colors.button_bg],
+    ['Scrollbar color', colors.scrollbar_color],
+  ];
+  for (const [label, value] of rows) {
+    if (!value) continue;
+    const div = document.createElement('div');
+    div.className = 'kv';
+    const s = document.createElement('span');
+    s.textContent = label;
+    const strong = document.createElement('strong');
+    strong.style.fontFamily = 'var(--mono)';
+    strong.style.fontSize = '12px';
+    strong.textContent = value;
+    // Show color swatch for color values
+    if (/^rgb|#|hsl/.test(value)) {
+      const swatch = document.createElement('span');
+      swatch.style.cssText = `display:inline-block;width:12px;height:12px;border-radius:3px;background:${value};border:1px solid var(--line);margin-left:6px;vertical-align:middle`;
+      strong.appendChild(swatch);
+    }
+    div.appendChild(s);
+    div.appendChild(strong);
+    grid.appendChild(div);
+  }
+}
+
+function fillMathFingerprint(mathFp) {
+  const grid = $('math-fp-grid');
+  if (!grid) return;
+  if (!mathFp) { grid.innerHTML = '<div class="empty">—</div>'; return; }
+  grid.replaceChildren();
+  const labels = {
+    tan: 'Math.tan(-1e300)', sin: 'Math.sin(π)', cos: 'Math.cos(π)',
+    acos: 'Math.acos(0.123…)', atan2: 'Math.atan2(90,15)',
+    exp: 'Math.exp(1)', log: 'Math.log(π)',
+    sinh: 'Math.sinh(1)', cosh: 'Math.cosh(1)', tanh: 'Math.tanh(1)',
+    sqrt2: 'Math.SQRT2',
+  };
+  for (const [k, label] of Object.entries(labels)) {
+    const v = mathFp[k];
+    if (v === undefined) continue;
+    const div = document.createElement('div');
+    div.className = 'kv';
+    const s = document.createElement('span');
+    s.textContent = label;
+    const strong = document.createElement('strong');
+    strong.style.fontFamily = 'var(--mono)';
+    strong.style.fontSize = '11px';
+    strong.textContent = typeof v === 'number' ? v.toString() : String(v);
+    div.appendChild(s);
+    div.appendChild(strong);
+    grid.appendChild(div);
+  }
+}
+
+function fillSpeechAndPlugins(speech, plugins) {
+  const speechEl = $('speech-voices');
+  if (speechEl) {
+    if (!speech) { speechEl.textContent = 'Не поддерживается'; }
+    else {
+      speechEl.textContent = `${speech.count} голос(ов)`;
+      if (speech.sample && speech.sample.length) {
+        speechEl.textContent += ' — ' + speech.sample.slice(0, 3).join(', ') + (speech.count > 3 ? '…' : '');
+      }
+    }
+  }
+  const pluginsEl = $('plugins-count');
+  if (pluginsEl) {
+    if (!plugins) { pluginsEl.textContent = '—'; }
+    else {
+      pluginsEl.textContent = String(plugins.count);
+      if (plugins.names && plugins.names.length) {
+        pluginsEl.textContent += ' — ' + plugins.names.join(', ');
+      }
+    }
+  }
+}
+
+function fillHttpHeaders(headers) {
+  const grid = $('http-headers-grid');
+  if (!grid) return;
+  if (!headers || typeof headers !== 'object') {
+    grid.innerHTML = '<div class="empty">—</div>';
+    return;
+  }
+  grid.replaceChildren();
+  const entries = Object.entries(headers);
+  if (!entries.length) {
+    grid.innerHTML = '<div class="empty">Заголовки не получены.</div>';
+    return;
+  }
+  // Sort: security/fingerprint-relevant headers first
+  const PRIORITY = ['User-Agent','Accept','Accept-Language','Accept-Encoding',
+                    'Accept-Charset','Connection','TE','Cache-Control',
+                    'Pragma','Upgrade-Insecure-Requests','Sec-Fetch-Site',
+                    'Sec-Fetch-Mode','Sec-Fetch-Dest','Sec-Fetch-User',
+                    'Sec-Ch-Ua','Sec-Ch-Ua-Mobile','Sec-Ch-Ua-Platform',
+                    'Sec-Gpc','Dnt','Referer'];
+  entries.sort(([a], [b]) => {
+    const ai = PRIORITY.indexOf(a), bi = PRIORITY.indexOf(b);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.localeCompare(b);
+  });
+  for (const [name, value] of entries) {
+    const div = document.createElement('div');
+    div.className = 'kv';
+    const label = document.createElement('span');
+    label.textContent = name;
+    const val = document.createElement('strong');
+    val.className = 'mono';
+    val.style.fontSize = '11px';
+    val.textContent = String(value);
+    div.appendChild(label);
+    div.appendChild(val);
+    grid.appendChild(div);
+  }
+}
+
+function fillIPv6Test(mainIp, mainVer, ipv6result) {
+  setText('ipv6-main-ip', mainIp || '—');
+  setText('ipv6-main-ver', mainVer || '—');
+  if (!ipv6result) {
+    setText('ipv6-detected', 'Недоступен (нет IPv6 на сервере)');
+    setText('ipv6-ep-ver', '—');
+    const statusEl = $('ipv6-status');
+    if (statusEl) { statusEl.textContent = '⚪ Тест недоступен'; statusEl.className = ''; }
+    const pill = $('ipv6-pill');
+    if (pill) pill.textContent = '⚪ N/A';
+    return;
+  }
+  setText('ipv6-detected', ipv6result.ip || '—');
+  setText('ipv6-ep-ver', ipv6result.version || '—');
+  const statusEl = $('ipv6-status');
+  const pill = $('ipv6-pill');
+  const mainIsV4 = mainVer === 'IPv4';
+  const epIsV6 = ipv6result.version === 'IPv6';
+  if (mainIsV4 && epIsV6) {
+    if (statusEl) { statusEl.textContent = '🔴 IPv6 leak — реальный IPv6 раскрыт при IPv4-VPN'; statusEl.className = 'red-text'; }
+    if (pill) pill.textContent = '🔴 Leak';
+  } else if (!epIsV6) {
+    if (statusEl) { statusEl.textContent = '🟢 IPv6 не используется / заблокирован'; statusEl.className = 'green-text'; }
+    if (pill) pill.textContent = '🟢 Safe';
+  } else {
+    if (statusEl) { statusEl.textContent = '🟡 IPv6 используется (основное соединение тоже IPv6)'; statusEl.className = 'yellow-text'; }
+    if (pill) pill.textContent = '🟡 IPv6';
+  }
+}
+
+function fillFingerprintUniqueness(uniqueness, fpHash) {
+  setText('fp-uniq-hash', fpHash || '—');
+  if (!uniqueness) {
+    setText('fp-uniq-sessions', '—');
+    setText('fp-uniq-ips', '—');
+    setText('fp-uniq-level', '—');
+    const pill = $('fp-unique-pill');
+    if (pill) pill.textContent = 'нет данных';
+    return;
+  }
+  const { total_sessions, unique_ips } = uniqueness;
+  setText('fp-uniq-sessions', String(total_sessions));
+  setText('fp-uniq-ips', String(unique_ips));
+  const levelEl = $('fp-uniq-level');
+  const pill = $('fp-unique-pill');
+  if (total_sessions === 1) {
+    if (levelEl) { levelEl.textContent = '🟢 Первый раз — уникальный'; levelEl.className = 'green-text'; }
+    if (pill) pill.textContent = '🟢 Уникальный';
+  } else if (unique_ips > 1) {
+    if (levelEl) { levelEl.textContent = `🔴 Виден с ${unique_ips} IP — надёжно отслеживается`; levelEl.className = 'red-text'; }
+    if (pill) pill.textContent = '🔴 Отслеживается';
+  } else {
+    if (levelEl) { levelEl.textContent = `🟡 ${total_sessions} сессий, 1 IP — скорее всего ты`; levelEl.className = 'yellow-text'; }
+    if (pill) pill.textContent = '🟡 ' + total_sessions + ' сессий';
+  }
+}
+
+function fillVisitTimeline(timeline) {
+  const box = $('visit-timeline');
+  if (!box) return;
+  if (!timeline || !timeline.length) {
+    box.innerHTML = '<div class="empty">Данных нет — это первый визит с таким fingerprint.</div>';
+    return;
+  }
+  box.replaceChildren();
+  timeline.forEach((visit, i) => {
+    const item = document.createElement('div');
+    item.className = 'timeline-item';
+    const dot = document.createElement('div');
+    dot.className = 'timeline-dot ' + (i === 0 ? 'same' : 'diff');
+    const meta = document.createElement('div');
+    meta.className = 'timeline-meta';
+    const date = document.createElement('div');
+    date.className = 'timeline-date';
+    // Format date nicely
+    try {
+      const d = new Date(visit.created_at);
+      date.textContent = d.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+    } catch { date.textContent = String(visit.created_at || '?'); }
+    const ipEl = document.createElement('div');
+    ipEl.className = 'timeline-ip';
+    // Mask middle of IP for display
+    const ip = String(visit.ip || '?');
+    const parts = ip.split('.');
+    const maskedIp = parts.length === 4 ? `${parts[0]}.${parts[1]}.x.x` : ip;
+    const loc = [visit.geo_city, visit.geo_country].filter(Boolean).join(', ');
+    ipEl.textContent = maskedIp + (loc ? ' • ' + loc : '');
+    meta.appendChild(date);
+    meta.appendChild(ipEl);
+    item.appendChild(dot);
+    item.appendChild(meta);
+    if (i === 0) {
+      const badge = document.createElement('span');
+      badge.className = 'badge green';
+      badge.textContent = 'текущий';
+      item.appendChild(badge);
+    }
+    box.appendChild(item);
+  });
+}
+
+function fillWebGLDetailed(webgl) {
+  const grid = $('webgl-detailed-grid');
+  if (!grid) return;
+  if (!webgl) {
+    grid.innerHTML = '<div class="empty">WebGL недоступен или заблокирован.</div>';
+    return;
+  }
+  grid.replaceChildren();
+  const rows = [
+    ['Vendor', webgl.vendor],
+    ['Renderer', webgl.renderer],
+    ['GL Version', webgl.version],
+    ['GLSL Version', webgl.shading_language],
+    ['Max Texture Size', webgl.max_texture_size ? `${webgl.max_texture_size}px` : null],
+    ['Max Renderbuffer', webgl.max_renderbuffer ? `${webgl.max_renderbuffer}px` : null],
+    ['Max Cube Map', webgl.max_cube_map ? `${webgl.max_cube_map}px` : null],
+    ['Max Anisotropy', webgl.max_anisotropy],
+    ['Vertex Precision', webgl.vertex_precision != null ? webgl.vertex_precision + ' бит' : null],
+    ['Fragment Precision', webgl.fragment_precision != null ? webgl.fragment_precision + ' бит' : null],
+    ['Extensions count', webgl.extensions_count],
+    ['Notable extensions', (webgl.extensions_notable || []).join(', ') || '—'],
+  ];
+  for (const [label, value] of rows) {
+    const div = document.createElement('div');
+    div.className = 'kv';
+    const s = document.createElement('span');
+    s.textContent = label;
+    const strong = document.createElement('strong');
+    strong.style.fontSize = '12px';
+    strong.textContent = value != null && value !== '' ? String(value) : '—';
+    div.appendChild(s);
+    div.appendChild(strong);
+    grid.appendChild(div);
+  }
+}
+
+function fillFeatureGrid(containerId, entries, scoreEl) {
+  const grid = $(containerId);
+  if (!grid) return;
+  grid.replaceChildren();
+  let yes = 0;
+  for (const [label, value] of entries) {
+    const item = document.createElement('div');
+    item.className = 'feat-item ' + (value ? 'yes' : 'no');
+    const icon = document.createElement('span');
+    icon.className = 'feat-icon';
+    icon.textContent = value ? '✅' : '❌';
+    const lbl = document.createElement('span');
+    lbl.className = 'feat-label';
+    lbl.textContent = label;
+    item.appendChild(icon);
+    item.appendChild(lbl);
+    grid.appendChild(item);
+    if (value) yes++;
+  }
+  if (scoreEl) {
+    const el = $(scoreEl);
+    if (el) el.textContent = `${yes}/${entries.length}`;
+  }
+}
+
+function fillCssSupports(features) {
+  if (!features) return;
+  const CSS_LABELS = {
+    grid_subgrid:        'Grid Subgrid',
+    container_queries:   'Container Queries',
+    color_mix:           'color-mix()',
+    has_selector:        ':has() selector',
+    dvh_units:           'dvh units',
+    logical_properties:  'Логические свойства',
+    oklch_color:         'oklch()',
+    p3_color:            'display-p3',
+    cascade_layers:      'Cascade Layers (@layer)',
+    scroll_timeline:     'Scroll Timeline',
+    anchor_positioning:  'Anchor Positioning',
+    nesting:             'CSS Nesting',
+  };
+  const entries = Object.entries(features).map(([k, v]) => [CSS_LABELS[k] || k, !!v]);
+  fillFeatureGrid('css-features-grid', entries, 'css-fp-score');
+}
+
+function fillExtendedApis(apis) {
+  if (!apis) return;
+  const API_LABELS = {
+    bluetooth:          'Bluetooth API',
+    usb:                'WebUSB',
+    serial:             'Web Serial',
+    hid:                'WebHID',
+    nfc:                'Web NFC',
+    keyboard:           'Keyboard API',
+    contacts:           'Contacts API',
+    presentation:       'Presentation API',
+    wake_lock:          'Wake Lock',
+    scheduling:         'Scheduling API',
+    ink:                'Ink API',
+    gamepads:           'Gamepad API',
+    midi:               'Web MIDI',
+    file_system_access: 'File System Access',
+    eye_dropper:        'EyeDropper',
+    screen_capture:     'Screen Capture',
+    window_management:  'Window Management',
+  };
+  const entries = Object.entries(apis).map(([k, v]) => [API_LABELS[k] || k, !!v]);
+  fillFeatureGrid('ext-apis-grid', entries, null);
+}
+
 async function sendCollect(visitId, client, score, risk, server) {
   try {
     const res = await fetch('./collect.php', {
@@ -1778,7 +2297,7 @@ async function sendCollect(visitId, client, score, risk, server) {
         fingerprint_hash: client.fingerprint_hash,
         privacy_score: score,
         risk_level: risk,
-        notes: server.vpn_hosting_reason || ''
+        vpn_reason: server.vpn_hosting_reason || ''
       })
     });
     return await res.json();
@@ -1805,13 +2324,14 @@ async function loadAll() {
       xContentTypeOptions: apiRes.headers.get('x-content-type-options') || '',
       crossOriginResourcePolicy: apiRes.headers.get('cross-origin-resource-policy') || '',
     };
-    const [apiData, client, perms, quota, swInfo, adblock] = await Promise.all([
+    const [apiData, client, perms, quota, swInfo, adblock, ipv6result] = await Promise.all([
       apiRes.json(),
       collectClientSignals(),
       getBrowserPermissions(),
       getStorageQuota(),
       getServiceWorkerInfo(),
       detectAdBlock(),
+      detectIPv6(),
     ]);
     currentVisitId = apiData.visit_id || null;
     const server = apiData.client || {};
@@ -1820,7 +2340,7 @@ async function loadAll() {
     const uaConsistency = checkUaChConsistency(client.user_agent, client.client_hints);
     const leaks = buildLeakItems(server, client);
     const { score, items: breakdownItems } = calculateScoreBreakdown(server, client, leaks);
-    const risk = score >= 80 ? 'green' : score >= 55 ? 'yellow' : 'red';
+    const risk = score >= RISK_GREEN_THRESHOLD ? 'green' : score >= RISK_YELLOW_THRESHOLD ? 'yellow' : 'red';
     const cats = buildRiskCategories(leaks);
     const recs = buildRecommendations(server, client, leaks, perms, adblock, gpcJs, quota);
     const comparison = buildBrowserComparison(client, server, adblock, gpcJs, perms);
@@ -1829,7 +2349,7 @@ async function loadAll() {
     fillClientDetails(server, client);
     fillIpIntelligence(server);
     fillServerExposure(server);
-    fillUaCh(client.client_hints, uaConsistency);
+    fillUaCh(client.client_hints, uaConsistency, server.sec_ch_ua);
     fillPermissions(perms);
     fillStorageState(client.storage_state, quota, swInfo);
     fillNetworkPrivacy(server, client, adblock, client.cookie_test, gpcJs, respHeaders);
@@ -1839,6 +2359,14 @@ async function loadAll() {
     fillRiskCategories(cats);
     fillRecommendations(recs);
     fillBrowserComparison(comparison);
+    fillHttpHeaders(server.all_request_headers || {});
+    fillIPv6Test(server.ip, server.client_ip_version, ipv6result);
+    fillWebGLDetailed(client.webgl_detailed || null);
+    fillCssSupports(client.css_supports || null);
+    fillExtendedApis(client.extended_apis || null);
+    fillSystemColors(client.system_colors || null);
+    fillMathFingerprint(client.math_fp || null);
+    fillSpeechAndPlugins(client.speech_voices || null, client.plugins || null);
 
     const combined = {
       timestamp_iso8601: apiData.timestamp_iso8601,
@@ -1855,7 +2383,6 @@ async function loadAll() {
       drift,
     };
     lastJSON = JSON.stringify(combined, null, 2);
-    setText('raw-json', lastJSON);
     if (statusDot) statusDot.className = 'dot';
     if (statusText) statusText.textContent = 'API online';
 
@@ -1881,12 +2408,16 @@ async function loadAll() {
           banner.style.display = 'block';
         }
       }
+      fillFingerprintUniqueness(collectResult?.uniqueness ?? null, client.fingerprint_hash);
+      fillVisitTimeline(collectResult?.visit_timeline ?? []);
+    } else {
+      fillFingerprintUniqueness(null, client.fingerprint_hash);
+      fillVisitTimeline([]);
     }
   } catch (err) {
     console.error(err);
     if (statusDot) { statusDot.className = 'dot error'; }
     if (statusText) statusText.textContent = 'API error';
-    setText('raw-json', String(err));
   }
 }
 

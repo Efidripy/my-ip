@@ -146,7 +146,7 @@ table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{padding:11px 14
     };
     $vpn = (string)($row['vpn_hosting_risk'] ?: $row['risk_level'] ?: '—');
     $scoreVal = $row['privacy_score'] !== null ? (int)$row['privacy_score'] : null;
-    $scoreColor = $scoreVal === null ? '' : ($scoreVal >= 80 ? 'color:var(--green)' : ($scoreVal >= 55 ? 'color:var(--yellow)' : 'color:var(--red)'));
+    $scoreColor = $scoreVal === null ? '' : ($scoreVal >= 75 ? 'color:var(--green)' : ($scoreVal >= 45 ? 'color:var(--yellow)' : 'color:var(--red)'));
 ?>
         <tr>
           <td style="color:var(--muted);font-size:12px"><?= (int)$row['id'] ?></td>
@@ -196,8 +196,8 @@ table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{padding:11px 14
     const bH = d.cnt > 0 ? Math.max(4, (d.cnt / maxCnt) * uh) : 2;
     const y = pT + uh - bH;
     ctx.fillStyle = d.cnt === 0 ? 'rgba(255,255,255,.06)' :
-                    d.avg_score >= 80 ? 'rgba(124,242,154,.55)' :
-                    d.avg_score >= 55 ? 'rgba(255,209,102,.55)' : 'rgba(255,107,107,.55)';
+                    d.avg_score >= 75 ? 'rgba(124,242,154,.55)' :
+                    d.avg_score >= 45 ? 'rgba(255,209,102,.55)' : 'rgba(255,107,107,.55)';
     const r = Math.min(5, bW / 2);
     ctx.beginPath();
     ctx.moveTo(x + r, y); ctx.lineTo(x + bW - r, y);

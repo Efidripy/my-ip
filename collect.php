@@ -22,18 +22,18 @@ $clientJson = json_encode($data['client'] ?? [], JSON_UNESCAPED_UNICODE | JSON_U
 $clientHash = (string)($data['fingerprint_hash'] ?? '');
 $privacyScore = isset($data['privacy_score']) ? (int)$data['privacy_score'] : null;
 $riskLevel = (string)($data['risk_level'] ?? '');
-$notes = (string)($data['notes'] ?? '');
+$vpnReason = (string)($data['vpn_reason'] ?? '');
 
 try {
     $pdo = db();
-    $stmt = $pdo->prepare('UPDATE visits SET updated_at = :updated_at, client_json = :client_json, client_hash = :client_hash, privacy_score = :privacy_score, risk_level = :risk_level, notes = :notes WHERE id = :id');
+    $stmt = $pdo->prepare('UPDATE visits SET updated_at = :updated_at, client_json = :client_json, client_hash = :client_hash, privacy_score = :privacy_score, risk_level = :risk_level, vpn_reason = :vpn_reason WHERE id = :id');
     $stmt->execute([
         ':updated_at' => gmdate('c'),
         ':client_json' => $clientJson,
         ':client_hash' => $clientHash,
         ':privacy_score' => $privacyScore,
         ':risk_level' => $riskLevel,
-        ':notes' => $notes,
+        ':vpn_reason' => $vpnReason,
         ':id' => $visitId,
     ]);
 
@@ -52,10 +52,30 @@ try {
                 'same_ip'  => (string)$prev['ip'] === $currentIp,
             ];
         }
+
+        // Fingerprint uniqueness: how many sessions / unique IPs share this hash
+        $uStmt = $pdo->prepare(
+            'SELECT COUNT(*) as total_sessions, COUNT(DISTINCT ip) as unique_ips FROM visits WHERE client_hash = :hash'
+        );
+        $uStmt->execute([':hash' => $clientHash]);
+        $uRow = $uStmt->fetch();
+        if ($uRow) {
+            $uniqueness = [
+                'total_sessions' => (int)$uRow['total_sessions'],
+                'unique_ips'     => (int)$uRow['unique_ips'],
+            ];
+        }
+
+        // Last 10 visits with this hash for timeline display
+        $tlStmt = $pdo->prepare(
+            'SELECT created_at, ip, geo_country, geo_city FROM visits WHERE client_hash = :hash ORDER BY created_at DESC LIMIT 10'
+        );
+        $tlStmt->execute([':hash' => $clientHash]);
+        $visitTimeline = $tlStmt->fetchAll() ?: [];
     }
 } catch (Throwable $e) {
     error_log('collect.php: ' . $e->getMessage());
     json_response(['ok' => false, 'error' => 'internal_error'], 500);
 }
 
-json_response(['ok' => true, 'prev_visit' => $prevVisit]);
+json_response(['ok' => true, 'prev_visit' => $prevVisit, 'uniqueness' => $uniqueness ?? null, 'visit_timeline' => $visitTimeline ?? []]);

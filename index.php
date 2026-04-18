@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KLEVA My-IP PRO</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="assets/style.css?v=8">
-  <script defer src="assets/app.js?v=8"></script>
+  <link rel="stylesheet" href="assets/style.css?v=11">
+  <script defer src="assets/app.js?v=11"></script>
 </head>
 <body>
   <div class="bg-glow"></div>
@@ -196,6 +196,34 @@
         <section class="card glass">
           <div class="card-head">
             <div>
+              <h2>Уникальность fingerprint</h2>
+              <p>Сколько сессий с таким же отпечатком видела наша база — трекинг без cookies.</p>
+            </div>
+            <span class="pill subtle" id="fp-unique-pill">—</span>
+          </div>
+          <div class="kv-grid">
+            <div class="kv"><span>Сессий с этим FP</span><strong id="fp-uniq-sessions">—</strong></div>
+            <div class="kv"><span>Уникальных IP</span><strong id="fp-uniq-ips">—</strong></div>
+            <div class="kv"><span>Уникальность</span><strong id="fp-uniq-level">—</strong></div>
+            <div class="kv"><span>Fingerprint hash</span><strong class="mono" id="fp-uniq-hash">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>История визитов</h2>
+              <p>Последние сессии с этим fingerprint — трекинг без cookies в действии.</p>
+            </div>
+          </div>
+          <div id="visit-timeline" class="timeline-list">
+            <div class="empty">Ожидание данных сервера…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
               <h2>Рекомендации</h2>
               <p>Персональный чеклист с приоритетом влияния на приватность.</p>
             </div>
@@ -240,6 +268,7 @@
             <div class="kv"><span>Network</span><strong id="fp-network">—</strong></div>
             <div class="kv"><span>System locale</span><strong id="fp-locale">—</strong></div>
             <div class="kv"><span>Fonts found</span><strong id="fp-fonts-count">—</strong></div>
+            <div class="kv"><span>Fonts list</span><strong id="fp-fonts-list" style="font-size:11px">—</strong></div>
             <div class="kv"><span>UA brands</span><strong id="fp-ua-brands">—</strong></div>
             <div class="kv"><span>Outer/Inner diff</span><strong id="fp-outer-diff">—</strong></div>
             <div class="kv"><span>Screen orientation</span><strong id="fp-orientation">—</strong></div>
@@ -282,6 +311,7 @@
             <span class="pill subtle" id="ua-ch-status">—</span>
           </div>
           <div class="kv-grid">
+            <div class="kv"><span>Sec-CH-UA (заголовок)</span><strong class="mono" id="ua-ch-sec-header">—</strong></div>
             <div class="kv"><span>Platform</span><strong id="ua-ch-platform">—</strong></div>
             <div class="kv"><span>Platform version</span><strong id="ua-ch-platformversion">—</strong></div>
             <div class="kv"><span>Architecture</span><strong id="ua-ch-architecture">—</strong></div>
@@ -409,6 +439,100 @@
           </div>
           <div id="compare-grid" class="compare-grid">
             <div class="empty">Анализируем…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>IPv6 Leak Test</h2>
+              <p>Проверяем, раскрывает ли браузер IPv6-адрес при подключении через IPv4-VPN.</p>
+            </div>
+            <span class="pill subtle" id="ipv6-pill">—</span>
+          </div>
+          <div class="kv-grid">
+            <div class="kv"><span>IP (основной)</span><strong class="mono" id="ipv6-main-ip">—</strong></div>
+            <div class="kv"><span>IP (через ipv6-endpoint)</span><strong class="mono" id="ipv6-detected">—</strong></div>
+            <div class="kv"><span>Версия (основной)</span><strong id="ipv6-main-ver">—</strong></div>
+            <div class="kv"><span>Версия (endpoint)</span><strong id="ipv6-ep-ver">—</strong></div>
+            <div class="kv"><span>Статус</span><strong id="ipv6-status">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>HTTP Headers зеркало</h2>
+              <p>Все заголовки, которые видит сервер — по ним строится отпечаток HTTP-стека.</p>
+            </div>
+          </div>
+          <div id="http-headers-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>WebGL детально</h2>
+              <p>Расширенный профиль GPU — один из самых стабильных идентификаторов устройства.</p>
+            </div>
+          </div>
+          <div id="webgl-detailed-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>CSS Feature Fingerprint</h2>
+              <p>Поддержка современных CSS-фич уникальна для каждой версии браузера.</p>
+            </div>
+            <span class="pill subtle" id="css-fp-score">—</span>
+          </div>
+          <div id="css-features-grid" class="feature-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Расширенные Web API</h2>
+              <p>Наличие привилегированных API раскрывает тип устройства и ОС точнее UA.</p>
+            </div>
+          </div>
+          <div id="ext-apis-grid" class="feature-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+          <div class="kv-grid" style="margin-top:10px">
+            <div class="kv"><span>Speech voices</span><strong id="speech-voices">—</strong></div>
+            <div class="kv"><span>Browser plugins</span><strong id="plugins-count">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Системные цвета UI</h2>
+              <p>Цвета нативных элементов — чекбокс, select, кнопка — различаются в Windows, macOS, Linux.</p>
+            </div>
+          </div>
+          <div id="system-colors-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Math fingerprint</h2>
+              <p>Значения тригонометрических функций различаются в зависимости от JS-движка, ОС и архитектуры процессора.</p>
+            </div>
+          </div>
+          <div id="math-fp-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
           </div>
         </section>
 

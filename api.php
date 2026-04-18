@@ -39,7 +39,6 @@ $client = [
     'reverse_dns'          => $rdns,
     'x_forwarded_for'      => mask_private_in_xff($raw_xff),
     'x_real_ip'            => safe_server('HTTP_X_REAL_IP'),
-    'scheme'               => $https ? 'https' : 'http',
     'https'                => $https,
     'http_version'         => safe_server('SERVER_PROTOCOL'),
     'accept_language'      => safe_server('HTTP_ACCEPT_LANGUAGE'),
@@ -77,13 +76,14 @@ $client = [
         'level'  => $exposure_level,
         'issues' => $exposure_issues,
     ],
+    'all_request_headers' => getallheaders() ?: [],
 ];
 
 $visitId = null;
 try {
     $pdo = db();
     $now = gmdate('c');
-    $stmt = $pdo->prepare('INSERT INTO visits (created_at, updated_at, ip, reverse_dns, x_real_ip, x_forwarded_for, scheme, http_version, accept_language, dnt, user_agent, referer_present, origin_present, sec_ch_ua_present, geo_country, geo_city, geo_region, geo_timezone, asn, as_org, vpn_hosting_risk, vpn_hosting_reason, is_tor) VALUES (:created_at, :updated_at, :ip, :reverse_dns, :x_real_ip, :x_forwarded_for, :scheme, :http_version, :accept_language, :dnt, :user_agent, :referer_present, :origin_present, :sec_ch_ua_present, :geo_country, :geo_city, :geo_region, :geo_timezone, :asn, :as_org, :vpn_hosting_risk, :vpn_hosting_reason, :is_tor)');
+    $stmt = $pdo->prepare('INSERT INTO visits (created_at, updated_at, ip, reverse_dns, x_real_ip, x_forwarded_for, scheme, http_version, accept_language, dnt, user_agent, referer_present, origin_present, sec_ch_ua_present, sec_ch_ua, geo_country, geo_city, geo_region, geo_timezone, asn, as_org, vpn_hosting_risk, vpn_hosting_reason, is_tor) VALUES (:created_at, :updated_at, :ip, :reverse_dns, :x_real_ip, :x_forwarded_for, :scheme, :http_version, :accept_language, :dnt, :user_agent, :referer_present, :origin_present, :sec_ch_ua_present, :sec_ch_ua, :geo_country, :geo_city, :geo_region, :geo_timezone, :asn, :as_org, :vpn_hosting_risk, :vpn_hosting_reason, :is_tor)');
     $stmt->execute([
         ':created_at' => $now,
         ':updated_at' => $now,
@@ -99,6 +99,7 @@ try {
         ':referer_present' => safe_server('HTTP_REFERER') !== '' ? 1 : 0,
         ':origin_present' => safe_server('HTTP_ORIGIN') !== '' ? 1 : 0,
         ':sec_ch_ua_present' => safe_server('HTTP_SEC_CH_UA') !== '' ? 1 : 0,
+        ':sec_ch_ua' => safe_server('HTTP_SEC_CH_UA'),
         ':geo_country' => $geo['country'],
         ':geo_city' => $geo['city'],
         ':geo_region' => $geo['region'],
