@@ -762,18 +762,18 @@ function calculateScoreBreakdown(server, client, leaks) {
   const items = [];
   let score = 100;
   for (const l of leaks) {
-    const pts = l.level === 'red' ? 18 : l.level === 'yellow' ? 8 : 2;
+    const pts = getDeductionByLevel(l.level);
     score -= pts;
     items.push({ name: l.title, deduction: pts, level: l.level });
   }
   const extras = [
-    { check: !server.dnt,                                    name: 'Нет DNT заголовка',      pts: 4 },
-    { check: client.cookie_enabled,                          name: 'Cookies включены',        pts: 4 },
-    { check: server.referer_present,                         name: 'Referer заголовок',       pts: 5 },
-    { check: server.origin_present,                          name: 'Origin заголовок',        pts: 4 },
-    { check: server.sec_ch_ua_present,                       name: 'Client Hints',            pts: 3 },
+    { check: !server.dnt,                                    name: 'Нет DNT заголовка',      pts: 2 },
+    { check: client.cookie_enabled,                          name: 'Cookies включены',        pts: 2 },
+    { check: server.referer_present,                         name: 'Referer заголовок',       pts: 2 },
+    { check: server.origin_present,                          name: 'Origin заголовок',        pts: 2 },
+    { check: server.sec_ch_ua_present,                       name: 'Client Hints',            pts: 1 },
     { check: (client.languages?.length ?? 0) > MAX_SAFE_LANGUAGES,
-      name: `Много языков (${client.languages?.length ?? 0})`, pts: 3 },
+      name: `Много языков (${client.languages?.length ?? 0})`, pts: 1 },
   ];
   for (const e of extras) {
     if (e.check) { score -= e.pts; items.push({ name: e.name, deduction: e.pts, level: 'yellow' }); }
@@ -786,6 +786,13 @@ const MAX_SAFE_LANGUAGES = 2;
 const BREAKDOWN_BAR_SCALE = 5.5;
 const MAX_SCORE_HISTORY = 20;
 const PROXY_PORTS = new Set([1080, 3128, 8080, 8888, 9050, 9150, 1194, 4145]);
+const RISK_GREEN_THRESHOLD = 75;
+const RISK_YELLOW_THRESHOLD = 45;
+const LEVEL_DEDUCTIONS = Object.freeze({ red: 14, yellow: 5, green: 1 });
+
+function getDeductionByLevel(level) {
+  return LEVEL_DEDUCTIONS[level] ?? LEVEL_DEDUCTIONS.yellow;
+}
 function renderBreakdown(items) {
   const grid = $('breakdown-grid');
   if (!grid) return;
@@ -903,13 +910,13 @@ function renderSparkline(canvasId, scores) {
   const last = pts[pts.length - 1], ls = scores[scores.length - 1];
   ctx.beginPath();
   ctx.arc(last[0], last[1], 3, 0, Math.PI * 2);
-  ctx.fillStyle = ls >= 80 ? '#7cf29a' : ls >= 55 ? '#ffd166' : '#ff6b6b';
+  ctx.fillStyle = ls >= RISK_GREEN_THRESHOLD ? '#7cf29a' : ls >= RISK_YELLOW_THRESHOLD ? '#ffd166' : '#ff6b6b';
   ctx.fill();
 }
 
 function explainScore(score) {
-  if (score >= 80) return 'Профиль относительно аккуратный: сигналы есть, но без жёстких утечек.';
-  if (score >= 55) return 'Средний уровень палевности: обычный сайт и трекер увидят о тебе уже довольно много.';
+  if (score >= RISK_GREEN_THRESHOLD) return 'Профиль относительно аккуратный: есть отдельные сигналы, но без критичных утечек.';
+  if (score >= RISK_YELLOW_THRESHOLD) return 'Умеренный уровень палевности: часть сигналов заметна, но это ещё не максимальный риск.';
   return 'Шумный профиль: адрес, fingerprint и дополнительные сигналы делают тебя хорошо различимым.';
 }
 
@@ -1671,7 +1678,7 @@ function fillRiskCategories(cats) {
   for (const [, cat] of Object.entries(cats)) {
     if (cat.items.length === 0) continue;
     hasAny = true;
-    const total = cat.items.reduce((s, l) => s + (l.level === 'red' ? 18 : l.level === 'yellow' ? 8 : 2), 0);
+    const total = cat.items.reduce((s, l) => s + getDeductionByLevel(l.level), 0);
     const div = document.createElement('div');
     div.className = 'cat-block';
     const h = document.createElement('div');
@@ -1820,7 +1827,7 @@ async function loadAll() {
     const uaConsistency = checkUaChConsistency(client.user_agent, client.client_hints);
     const leaks = buildLeakItems(server, client);
     const { score, items: breakdownItems } = calculateScoreBreakdown(server, client, leaks);
-    const risk = score >= 80 ? 'green' : score >= 55 ? 'yellow' : 'red';
+    const risk = score >= RISK_GREEN_THRESHOLD ? 'green' : score >= RISK_YELLOW_THRESHOLD ? 'yellow' : 'red';
     const cats = buildRiskCategories(leaks);
     const recs = buildRecommendations(server, client, leaks, perms, adblock, gpcJs, quota);
     const comparison = buildBrowserComparison(client, server, adblock, gpcJs, perms);

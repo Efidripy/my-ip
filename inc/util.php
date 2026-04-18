@@ -51,8 +51,8 @@ function is_https_request(): bool {
 }
 
 function detect_risk_level(int $score): string {
-    if ($score >= 80) return 'green';
-    if ($score >= 55) return 'yellow';
+    if ($score >= 75) return 'green';
+    if ($score >= 45) return 'yellow';
     return 'red';
 }
 
