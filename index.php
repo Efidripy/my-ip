@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KLEVA My-IP PRO</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="assets/style.css?v=6">
-  <script defer src="assets/app.js?v=6"></script>
+  <link rel="stylesheet" href="assets/style.css?v=7">
+  <script defer src="assets/app.js?v=7"></script>
 </head>
 <body>
   <div class="bg-glow"></div>
@@ -140,6 +140,42 @@
             <div class="kv"><span>Точность геолокации</span><strong id="kv-geo-accuracy">—</strong></div>
           </div>
         </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Риски по категориям</h2>
+              <p>Вклад сетевых, браузерных, поведенческих и протокольных сигналов.</p>
+            </div>
+          </div>
+          <div id="risk-cats" class="cat-container">
+            <div class="empty">Анализируем…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Дрифт параметров</h2>
+              <p>Изменения fingerprint между текущим и прошлым визитом.</p>
+            </div>
+          </div>
+          <div id="drift-list" class="drift-list">
+            <div class="empty">Собираем…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Рекомендации</h2>
+              <p>Персональный чеклист с приоритетом влияния на приватность.</p>
+            </div>
+          </div>
+          <div id="recs-list" class="recs-list">
+            <div class="empty">Анализируем…</div>
+          </div>
+        </section>
       </div>
 
       <div class="right-col">
@@ -212,12 +248,145 @@
         <section class="card glass">
           <div class="card-head">
             <div>
+              <h2>UA-CH профиль</h2>
+              <p>Высокоточные Client Hints и соответствие User-Agent.</p>
+            </div>
+            <span class="pill subtle" id="ua-ch-status">—</span>
+          </div>
+          <div class="kv-grid">
+            <div class="kv"><span>Platform</span><strong id="ua-ch-platform">—</strong></div>
+            <div class="kv"><span>Platform version</span><strong id="ua-ch-platformversion">—</strong></div>
+            <div class="kv"><span>Architecture</span><strong id="ua-ch-architecture">—</strong></div>
+            <div class="kv"><span>Bitness</span><strong id="ua-ch-bitness">—</strong></div>
+            <div class="kv"><span>Mobile</span><strong id="ua-ch-mobile">—</strong></div>
+            <div class="kv"><span>Model</span><strong id="ua-ch-model">—</strong></div>
+            <div class="kv"><span>Full version</span><strong id="ua-ch-uafullversion">—</strong></div>
+            <div class="kv"><span>Brand list</span><strong id="ua-ch-brands">—</strong></div>
+            <div class="kv"><span>UA vs UA-CH</span><strong id="ua-ch-consistency">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Разрешения браузера</h2>
+              <p>Статус доступа к устройствам: granted / prompt / denied.</p>
+            </div>
+          </div>
+          <div id="perms-grid" class="kv-grid">
+            <div class="empty">Запрашиваем…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Хранилища и Service Worker</h2>
+              <p>Доступность cookies, localStorage, IndexedDB, SW, Cache API и квота.</p>
+            </div>
+          </div>
+          <div class="kv-grid">
+            <div class="kv"><span>Cookies</span><strong id="store-cookies">—</strong></div>
+            <div class="kv"><span>localStorage</span><strong id="store-local">—</strong></div>
+            <div class="kv"><span>sessionStorage</span><strong id="store-session">—</strong></div>
+            <div class="kv"><span>IndexedDB</span><strong id="store-idb">—</strong></div>
+            <div class="kv"><span>Квота хранилища</span><strong id="store-quota">—</strong></div>
+            <div class="kv"><span>Service Worker</span><strong id="store-sw">—</strong></div>
+            <div class="kv"><span>Cache API</span><strong id="store-cache">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Network Privacy</h2>
+              <p>GPC, AdBlock, Referrer-Policy, quality сети, IP стек.</p>
+            </div>
+          </div>
+          <div class="kv-grid">
+            <div class="kv"><span>GPC (сервер)</span><strong id="np-gpc-server">—</strong></div>
+            <div class="kv"><span>GPC (JS)</span><strong id="np-gpc-js">—</strong></div>
+            <div class="kv"><span>AdBlock</span><strong id="np-adblock">—</strong></div>
+            <div class="kv"><span>Cookie test</span><strong id="np-cookie-test">—</strong></div>
+            <div class="kv"><span>Referrer-Policy</span><strong id="np-referrer-policy">—</strong></div>
+            <div class="kv"><span>IP стек</span><strong id="np-ip-version">—</strong></div>
+            <div class="kv"><span>Network type</span><strong id="np-net-type">—</strong></div>
+            <div class="kv"><span>RTT</span><strong id="np-net-rtt">—</strong></div>
+            <div class="kv"><span>Downlink</span><strong id="np-net-downlink">—</strong></div>
+            <div class="kv"><span>Save-Data</span><strong id="np-save-data">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Request Context &amp; TLS</h2>
+              <p>Sec-Fetch-* заголовки, TLS версия и протокол HTTP.</p>
+            </div>
+          </div>
+          <div class="kv-grid">
+            <div class="kv"><span>Sec-Fetch-Site</span><strong id="sf-site">—</strong></div>
+            <div class="kv"><span>Sec-Fetch-Mode</span><strong id="sf-mode">—</strong></div>
+            <div class="kv"><span>Sec-Fetch-Dest</span><strong id="sf-dest">—</strong></div>
+            <div class="kv"><span>Sec-Fetch-User</span><strong id="sf-user">—</strong></div>
+            <div class="kv"><span>Sec-GPC (сервер)</span><strong id="sf-gpc">—</strong></div>
+            <div class="kv"><span>TLS версия</span><strong id="sf-tls">—</strong></div>
+            <div class="kv"><span>TLS cipher</span><strong id="sf-cipher">—</strong></div>
+            <div class="kv"><span>HTTP протокол</span><strong id="sf-http-proto">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Заголовки безопасности</h2>
+              <p>CSP, COOP, COEP и другие HTTP-заголовки ответа.</p>
+            </div>
+          </div>
+          <div class="kv-grid">
+            <div class="kv"><span>Content-Security-Policy</span><strong id="sec-csp">—</strong></div>
+            <div class="kv"><span>Cross-Origin-Opener-Policy</span><strong id="sec-coop">—</strong></div>
+            <div class="kv"><span>Cross-Origin-Embedder-Policy</span><strong id="sec-coep">—</strong></div>
+            <div class="kv"><span>X-Frame-Options</span><strong id="sec-xfo">—</strong></div>
+            <div class="kv"><span>Strict-Transport-Security</span><strong id="sec-hsts">—</strong></div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Сравнение с эталоном</h2>
+              <p>Сколько пунктов идеального privacy-профиля выполнено.</p>
+            </div>
+            <span class="pill subtle" id="compare-score">—</span>
+          </div>
+          <div id="compare-grid" class="compare-grid">
+            <div class="empty">Анализируем…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
               <h2>Сырые данные</h2>
               <p>JSON, который собрался на этой странице.</p>
             </div>
           </div>
           <pre id="raw-json" class="raw-box">Инициализация…</pre>
         </section>
+      </div>
+    </section>
+
+    <section class="card glass export-card">
+      <div class="card-head">
+        <div>
+          <h2>Экспорт отчёта</h2>
+          <p>Скачать полный или краткий отчёт для самоаудита.</p>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn primary" id="export-json-btn">⬇ Скачать JSON</button>
+        <button type="button" class="btn" id="export-txt-btn">⬇ Скачать TXT</button>
       </div>
     </section>
   </main>
