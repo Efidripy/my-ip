@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KLEVA My-IP PRO</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="assets/style.css?v=11">
-  <script defer src="assets/app.js?v=11"></script>
+  <link rel="stylesheet" href="assets/style.css?v=12">
+  <script defer src="assets/app.js?v=12"></script>
 </head>
 <body>
   <div class="bg-glow"></div>
@@ -536,6 +536,91 @@
           </div>
         </section>
 
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Codec Fingerprint</h2>
+              <p>Поддержка видео/аудио кодеков и возможности MediaCapabilities раскрывают тип устройства и ОС.</p>
+            </div>
+          </div>
+          <div id="codec-fp-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>WebGPU Fingerprint</h2>
+              <p>Данные GPU-адаптера из WebGPU API — вендор, архитектура, лимиты.</p>
+            </div>
+          </div>
+          <div id="webgpu-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Worker Realm Consistency</h2>
+              <p>Сравниваем fingerprint из Web Worker с главным потоком — несоответствие выдаёт спуфинг через расширения.</p>
+            </div>
+            <span class="pill subtle" id="worker-consistency-pill">—</span>
+          </div>
+          <div id="worker-consistency-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Timezone / Locale Integrity</h2>
+              <p>Согласованность таймзоны, локали, календаря, системы нумерации и hourCycle в Intl API.</p>
+            </div>
+          </div>
+          <div id="tz-locale-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Canvas Text Metrics</h2>
+              <p>Точные метрики рендера текста/emoji на разных шрифтах — более тонкий сигнал, чем обычный canvas-хэш.</p>
+            </div>
+          </div>
+          <div id="canvas-text-metrics-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>JS Runtime Fingerprint</h2>
+              <p>Формат stack trace, поддержка современных фич, особенности JS-движка — различаются между Chrome/Firefox/Safari.</p>
+            </div>
+          </div>
+          <div id="js-runtime-grid" class="kv-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
+        <section class="card glass">
+          <div class="card-head">
+            <div>
+              <h2>Entropy Score по секциям</h2>
+              <p>Оценка информационной ценности каждой категории сигналов — сколько «бит идентичности» она раскрывает.</p>
+            </div>
+          </div>
+          <div id="entropy-scores-grid" class="entropy-grid">
+            <div class="empty">Загрузка…</div>
+          </div>
+        </section>
+
       </div>
     </section>
 
@@ -549,6 +634,57 @@
       <div class="actions">
         <button type="button" class="btn primary" id="export-json-btn">⬇ Скачать JSON</button>
         <button type="button" class="btn" id="export-txt-btn">⬇ Скачать TXT</button>
+      </div>
+    </section>
+
+    <section class="card glass" style="margin-top:14px">
+      <div class="card-head">
+        <div>
+          <h2>🔗 Внешние тесты отпечатка</h2>
+          <p>Сравни свой профиль с ведущими инструментами fingerprint-анализа.</p>
+        </div>
+      </div>
+      <div class="ext-links-grid">
+        <a class="ext-link-card" href="https://abrahamjuliot.github.io/creepjs/" target="_blank" rel="noopener noreferrer">
+          <div class="ext-link-title">🕵️ CreepJS</div>
+          <div class="ext-link-desc">Самый детальный публичный fingerprinter: Worker, Lies detection, Audio, Canvas, WebGL, Fonts и уникальность среди базы.</div>
+          <div class="ext-link-url">abrahamjuliot.github.io/creepjs</div>
+        </a>
+        <a class="ext-link-card" href="https://coveryourtracks.eff.org/" target="_blank" rel="noopener noreferrer">
+          <div class="ext-link-title">🛡 Cover Your Tracks (EFF)</div>
+          <div class="ext-link-desc">Тест от Electronic Frontier Foundation — насколько ты уникален среди реальных пользователей и защищён от трекинга.</div>
+          <div class="ext-link-url">coveryourtracks.eff.org</div>
+        </a>
+        <a class="ext-link-card" href="https://browserleaks.com/" target="_blank" rel="noopener noreferrer">
+          <div class="ext-link-title">🔍 BrowserLeaks</div>
+          <div class="ext-link-desc">Набор отдельных тестов: WebRTC, Canvas, WebGL, Fonts, CSS, Client Hints, Timezone и другие каналы утечки.</div>
+          <div class="ext-link-url">browserleaks.com</div>
+        </a>
+        <a class="ext-link-card" href="https://arkenfox.github.io/TZP/tzp.html" target="_blank" rel="noopener noreferrer">
+          <div class="ext-link-title">📅 Timezone Privacy</div>
+          <div class="ext-link-desc">Тест от arkenfox: насколько timezone в браузере точно описывает твоё местоположение.</div>
+          <div class="ext-link-url">arkenfox.github.io/TZP</div>
+        </a>
+        <a class="ext-link-card" href="https://fingerprintjs.github.io/fingerprintjs/" target="_blank" rel="noopener noreferrer">
+          <div class="ext-link-title">🧬 FingerprintJS Demo</div>
+          <div class="ext-link-desc">Официальный демо ведущей коммерческой fingerprint-библиотеки — показывает стабильный visitorId.</div>
+          <div class="ext-link-url">fingerprintjs.github.io</div>
+        </a>
+        <a class="ext-link-card" href="https://www.deviceinfo.me/" target="_blank" rel="noopener noreferrer">
+          <div class="ext-link-title">📱 DeviceInfo.me</div>
+          <div class="ext-link-desc">Детальная информация об устройстве: GPU, аудио, сенсоры, медиа-кодеки, MIME-типы и многое другое.</div>
+          <div class="ext-link-url">deviceinfo.me</div>
+        </a>
+        <a class="ext-link-card" href="https://pixelscan.net/" target="_blank" rel="noopener noreferrer">
+          <div class="ext-link-title">🖥 PixelScan</div>
+          <div class="ext-link-desc">Проверяет антидетект-браузеры и прокси — насколько последовательны твои сигналы между собой.</div>
+          <div class="ext-link-url">pixelscan.net</div>
+        </a>
+        <a class="ext-link-card" href="https://ipleak.net/" target="_blank" rel="noopener noreferrer">
+          <div class="ext-link-title">🌐 IPLeak.net</div>
+          <div class="ext-link-desc">WebRTC, DNS и IP утечки — быстрая проверка VPN/прокси на предмет реального IP.</div>
+          <div class="ext-link-url">ipleak.net</div>
+        </a>
       </div>
     </section>
   </main>

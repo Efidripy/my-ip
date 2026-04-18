@@ -264,6 +264,293 @@ async function detectIPv6() {
   } catch { return null; }
 }
 
+// ============================================================
+// NEW COLLECTORS — v12
+// ============================================================
+
+function getCodecFingerprint() {
+  const result = { video: {}, audio: {}, media_capabilities: null };
+  try {
+    const v = document.createElement('video');
+    const videoTests = {
+      h264:   'video/mp4; codecs="avc1.42E01E"',
+      h265:   'video/mp4; codecs="hev1.1.6.L93.B0"',
+      vp8:    'video/webm; codecs="vp8"',
+      vp9:    'video/webm; codecs="vp9"',
+      av1:    'video/mp4; codecs="av01.0.05M.08"',
+      theora: 'video/ogg; codecs="theora"',
+    };
+    for (const [name, type] of Object.entries(videoTests)) {
+      result.video[name] = v.canPlayType(type) || 'no';
+    }
+    const a = document.createElement('audio');
+    const audioTests = {
+      mp3:        'audio/mpeg',
+      aac:        'audio/aac',
+      ogg_vorbis: 'audio/ogg; codecs="vorbis"',
+      opus:       'audio/ogg; codecs="opus"',
+      flac:       'audio/flac',
+      wav:        'audio/wav; codecs="1"',
+    };
+    for (const [name, type] of Object.entries(audioTests)) {
+      result.audio[name] = a.canPlayType(type) || 'no';
+    }
+  } catch {}
+  return result;
+}
+
+async function getCodecCapabilities() {
+  const result = {};
+  try {
+    if (!navigator.mediaCapabilities?.decodingInfo) return result;
+    const [h264, av1] = await Promise.all([
+      navigator.mediaCapabilities.decodingInfo({
+        type: 'file',
+        video: { contentType: 'video/mp4; codecs="avc1.42E01E"', width: 1920, height: 1080, bitrate: 4000000, framerate: 30 },
+      }).catch(() => null),
+      navigator.mediaCapabilities.decodingInfo({
+        type: 'file',
+        video: { contentType: 'video/mp4; codecs="av01.0.05M.08"', width: 1920, height: 1080, bitrate: 4000000, framerate: 30 },
+      }).catch(() => null),
+    ]);
+    if (h264) result.h264_1080p = { supported: h264.supported, smooth: h264.smooth, power_efficient: h264.powerEfficient };
+    if (av1)  result.av1_1080p  = { supported: av1.supported,  smooth: av1.smooth,  power_efficient: av1.powerEfficient  };
+  } catch {}
+  return result;
+}
+
+async function getWebGPUInfo() {
+  try {
+    if (!navigator.gpu) return { supported: false };
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) return { supported: true, adapter_available: false };
+    const info = adapter.info || await adapter.requestAdapterInfo().catch(() => null);
+    const limitKeys = ['maxTextureDimension2D', 'maxBufferSize', 'maxVertexBuffers', 'maxColorAttachments', 'maxBindGroups'];
+    const limits = {};
+    for (const k of limitKeys) {
+      if (adapter.limits && adapter.limits[k] !== undefined) limits[k] = adapter.limits[k];
+    }
+    return {
+      supported: true,
+      adapter_available: true,
+      vendor:       info?.vendor       || null,
+      architecture: info?.architecture || null,
+      device:       info?.device       || null,
+      description:  info?.description  || null,
+      is_fallback:  adapter.isFallbackAdapter ?? null,
+      features:     [...(adapter.features || [])].sort().slice(0, 20),
+      limits,
+    };
+  } catch { return { supported: false }; }
+}
+
+async function getWorkerConsistency() {
+  if (!window.Worker || !window.URL || !window.Blob) return { supported: false };
+  const src = `self.onmessage=function(){
+var r={};
+try{r.timezone=Intl.DateTimeFormat().resolvedOptions().timeZone;}catch(e){}
+try{r.language=navigator.language||'';}catch(e){}
+try{r.hardware_concurrency=navigator.hardwareConcurrency||null;}catch(e){}
+try{r.device_memory=navigator.deviceMemory||null;}catch(e){}
+try{r.math_tan=Math.tan(-1e300);r.math_sin=Math.sin(Math.PI);}catch(e){}
+var Ctx=(typeof OfflineAudioContext!=='undefined')?OfflineAudioContext:(typeof webkitOfflineAudioContext!=='undefined'?webkitOfflineAudioContext:null);
+if(Ctx){try{var ctx=new Ctx(1,44100,44100);var osc=ctx.createOscillator();osc.type='triangle';osc.frequency.value=1000;var comp=ctx.createDynamicsCompressor();osc.connect(comp);comp.connect(ctx.destination);osc.start(0);ctx.startRendering().then(function(buf){var d=buf.getChannelData(0);var s=0;for(var i=4500;i<4600;i++)s+=d[i];r.audio_sum=s.toFixed(6);self.postMessage(r);}).catch(function(){self.postMessage(r);});}catch(e){self.postMessage(r);}}else{self.postMessage(r);}};`;
+  try {
+    const blob = new Blob([src], { type: 'text/javascript' });
+    const url = URL.createObjectURL(blob);
+    return await new Promise((resolve) => {
+      let done = false;
+      const timer = setTimeout(() => {
+        if (done) return; done = true;
+        try { w.terminate(); URL.revokeObjectURL(url); } catch {}
+        resolve({ supported: true, timeout: true });
+      }, 3500);
+      const w = new Worker(url);
+      w.onmessage = (e) => {
+        if (done) return; done = true;
+        clearTimeout(timer);
+        try { w.terminate(); URL.revokeObjectURL(url); } catch {}
+        resolve({ supported: true, result: e.data });
+      };
+      w.onerror = () => {
+        if (done) return; done = true;
+        clearTimeout(timer);
+        try { w.terminate(); URL.revokeObjectURL(url); } catch {}
+        resolve({ supported: true, error: 'worker_error' });
+      };
+      w.postMessage(null);
+    });
+  } catch { return { supported: false }; }
+}
+
+function analyzeWorkerConsistency(workerRaw, client) {
+  if (!workerRaw?.result) return { mismatches: [], spoof_suspected: false };
+  const w = workerRaw.result;
+  const mismatches = [];
+  if (w.timezone && client.timezone && w.timezone !== client.timezone)
+    mismatches.push({ field: 'timezone', main: client.timezone, worker: w.timezone });
+  if (w.language && client.language && w.language !== client.language)
+    mismatches.push({ field: 'language', main: client.language, worker: w.language });
+  if (w.hardware_concurrency != null && client.hardware_concurrency != null
+      && w.hardware_concurrency !== client.hardware_concurrency)
+    mismatches.push({ field: 'hardwareConcurrency', main: String(client.hardware_concurrency), worker: String(w.hardware_concurrency) });
+  if (w.math_tan != null && client.math_fp?.tan != null
+      && Math.abs(w.math_tan - client.math_fp.tan) > 1e-14)
+    mismatches.push({ field: 'Math.tan', main: String(client.math_fp.tan), worker: String(w.math_tan) });
+  if (w.math_sin != null && client.math_fp?.sin != null
+      && Math.abs(w.math_sin - client.math_fp.sin) > 1e-14)
+    mismatches.push({ field: 'Math.sin', main: String(client.math_fp.sin), worker: String(w.math_sin) });
+  return { mismatches, spoof_suspected: mismatches.length > 0 };
+}
+
+function getTimezoneLocaleIntegrity() {
+  try {
+    const dtf = Intl.DateTimeFormat().resolvedOptions();
+    const numf = Intl.NumberFormat().resolvedOptions();
+    const relTf = Intl.RelativeTimeFormat ? new Intl.RelativeTimeFormat().resolvedOptions() : null;
+    const langFromNav = navigator.language || '';
+    const localeFromIntl = dtf.locale || '';
+    const langBase = langFromNav.split('-')[0].toLowerCase();
+    const localeBase = localeFromIntl.split('-')[0].toLowerCase();
+    const langLocaleMatch = langBase && localeBase ? langBase === localeBase : null;
+    // Sample formatted date — reveals locale/calendar quirks
+    const sampleDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'short' }).format(new Date(2024, 0, 15));
+    // hourCycle from explicit query
+    let hourCycle12 = null;
+    try { hourCycle12 = Intl.DateTimeFormat(langFromNav || undefined, { hour: 'numeric' }).resolvedOptions().hourCycle; } catch {}
+    // Supported calendars hint
+    let calendars = [];
+    try { calendars = Intl.supportedValuesOf('calendar').slice(0, 8); } catch {}
+    let numberingSystems = [];
+    try { numberingSystems = Intl.supportedValuesOf('numberingSystem').slice(0, 8); } catch {}
+    return {
+      timezone: dtf.timeZone,
+      tz_offset_minutes: new Date().getTimezoneOffset(),
+      locale: localeFromIntl,
+      calendar: dtf.calendar,
+      numbering_system: numf.numberingSystem || dtf.numberingSystem,
+      hour_cycle: dtf.hourCycle,
+      hour_cycle_explicit: hourCycle12,
+      lang_locale_match: langLocaleMatch,
+      sample_date: sampleDate,
+      calendars_supported: calendars,
+      numbering_systems: numberingSystems,
+      relative_time_locale: relTf?.locale || null,
+    };
+  } catch { return null; }
+}
+
+function getCanvasTextMetrics() {
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const result = {};
+    const samples = [
+      ['latin',    '14px Arial',           'The quick brown fox'],
+      ['cyrillic', '14px Arial',           'Привет мир'],
+      ['emoji',    '14px serif',           '🎉🔒🌍'],
+      ['arabic',   '14px Arial',           'مرحبا'],
+      ['mixed',    '14px sans-serif',      'Hello Мир 🌍'],
+      ['numbers',  '14px monospace',       '0123456789'],
+    ];
+    for (const [name, font, text] of samples) {
+      try {
+        ctx.font = font;
+        const m = ctx.measureText(text);
+        result[name] = {
+          width:   Math.round(m.width * 100) / 100,
+          asc:     m.fontBoundingBoxAscent  != null ? Math.round(m.fontBoundingBoxAscent  * 100) / 100 : null,
+          desc:    m.fontBoundingBoxDescent != null ? Math.round(m.fontBoundingBoxDescent * 100) / 100 : null,
+          em_asc:  m.emHeightAscent  != null ? Math.round(m.emHeightAscent  * 100) / 100 : null,
+        };
+      } catch {}
+    }
+    return result;
+  } catch { return null; }
+}
+
+function getJsRuntimeFingerprint() {
+  const r = {};
+  try {
+    // Stack trace engine signature
+    const err = new Error('fp');
+    const stack = err.stack || '';
+    r.stack_engine = stack.includes(' at ') ? 'v8/chakra' : stack.includes('@') ? 'spidermonkey' : 'webkit/other';
+    r.stack_first_line = (stack.split('\n')[0] || '').slice(0, 80);
+    // Function.prototype.toString normalisation
+    r.fn_str_normalized = /\bfunction\b/.test(function(){}.toString());
+    // Feature probes (help distinguish engine versions)
+    r.has_error_cause     = (() => { try { return new Error('x', {cause:'y'}).cause === 'y'; } catch { return false; } })();
+    r.has_array_at        = typeof [].at === 'function';
+    r.has_object_hasown   = typeof Object.hasOwn === 'function';
+    r.has_structured_clone = typeof structuredClone === 'function';
+    r.has_array_group_by  = typeof (Object.groupBy ?? Map.groupBy) === 'function';
+    r.has_promise_any     = typeof Promise.any === 'function';
+    r.has_string_replaceall = typeof ''.replaceAll === 'function';
+    r.regex_unicode_props = (() => { try { return /\p{L}/u.test('a'); } catch { return false; } })();
+    r.regex_dotall        = (() => { try { return /a.b/s.test('a\nb'); } catch { return false; } })();
+    // Numeric edge cases (varies by JS engine float implementation)
+    r.num_0_1_plus_0_2_len = (0.1 + 0.2).toString().length;
+    r.max_safe_int = Number.MAX_SAFE_INTEGER === 9007199254740991;
+    // Error name override
+    const e2 = new Error('x'); e2.name = 'Custom';
+    r.error_name_overridable = e2.toString().startsWith('Custom');
+  } catch {}
+  return r;
+}
+
+function computeSectionEntropyScores(client, server) {
+  const s = [];
+  // Canvas / Audio / WebGL — up to ~28 bits in practice
+  let fp = 0;
+  if (client.canvas_hash && client.canvas_hash !== 'unsupported') fp += 10;
+  if (client.audio_hash  && client.audio_hash  !== 'unsupported') fp += 8;
+  if (client.webgl?.renderer && client.webgl.renderer !== 'unsupported') fp += 7;
+  if (client.math_fp) fp += 3;
+  s.push({ name: '🎨 Canvas / Audio / WebGL', bits: fp, max: 28 });
+  // Screen + hardware
+  let hw = 0;
+  if (client.screen) hw += 4;
+  if (client.dpr && client.dpr !== 1) hw += 2;
+  if (client.hardware_concurrency) hw += 2;
+  if (client.device_memory) hw += 2;
+  if (client.color_depth) hw += 1;
+  s.push({ name: '🖥 Экран / Железо', bits: hw, max: 11 });
+  // Language + timezone
+  let loc = 0;
+  if (client.timezone) loc += 4;
+  if (client.language) loc += 3;
+  if ((client.languages || []).length > 1) loc += 2;
+  if (client.system_locale) loc += 2;
+  s.push({ name: '🌍 Язык / Таймзона', bits: loc, max: 11 });
+  // Fonts
+  const fc = client.fonts_count || 0;
+  const fontBits = fc > 20 ? 8 : fc > 10 ? 5 : fc > 0 ? 2 : 0;
+  s.push({ name: '🔤 Шрифты / Голоса', bits: fontBits + ((client.speech_voices?.count || 0) > 0 ? 2 : 0), max: 10 });
+  // UA / UA-CH
+  let ua = 0;
+  if (client.browser !== 'Unknown') ua += 3;
+  if ((client.ua_brands || []).length > 0) ua += 3;
+  if (client.client_hints?.platformVersion) ua += 3;
+  s.push({ name: '🔍 User-Agent / UA-CH', bits: ua, max: 9 });
+  // Codecs + WebGPU (new)
+  let codec = 0;
+  const vf = client.codec_fp?.video || {};
+  if (Object.keys(vf).length > 0) codec += 2;
+  if (vf.av1 === 'probably') codec += 1;
+  if (vf.h265 === 'probably') codec += 1;
+  if (client.webgpu?.vendor) codec += 2;
+  s.push({ name: '🎬 Кодеки / WebGPU', bits: codec, max: 6 });
+  // Network / IP
+  let net = 0;
+  if (server.asn_type === 'datacenter') net += 3;
+  if ((server.dnsbl_listed || 0) > 0) net += 2;
+  if (server.is_tor) net += 3;
+  s.push({ name: '🌐 Сеть / IP', bits: net, max: 8 });
+  return s;
+}
+
 function detectFonts() {
   const list = [
     'Arial', 'Arial Black', 'Arial Narrow', 'Calibri', 'Cambria', 'Candara',
@@ -509,7 +796,12 @@ async function collectClientSignals() {
   const gpc = navigator.globalPrivacyControl ?? null;
   const storage_state = getStorageState();
   const cookie_test = testCookiePolicy();
-  const [audio, webrtc, battery, incognito, media_devices, audio_ctx_details, client_hints, speech_voices] = await Promise.all([
+  const math_fp = getMathFingerprint();
+  const codec_fp = getCodecFingerprint();
+  const tz_locale = getTimezoneLocaleIntegrity();
+  const canvas_text_metrics = getCanvasTextMetrics();
+  const js_runtime = getJsRuntimeFingerprint();
+  const [audio, webrtc, battery, incognito, media_devices, audio_ctx_details, client_hints, speech_voices, webgpu, codec_caps, worker_raw] = await Promise.all([
     audioHash(),
     detectWebRTC(),
     getBatteryInfo(),
@@ -518,7 +810,11 @@ async function collectClientSignals() {
     getAudioContextDetails(),
     getFullClientHints(),
     getSpeechVoices(),
+    getWebGPUInfo(),
+    getCodecCapabilities(),
+    getWorkerConsistency(),
   ]);
+  codec_fp.media_capabilities = codec_caps;
 
   const client = {
     user_agent: ua,
@@ -563,11 +859,21 @@ async function collectClientSignals() {
     system_colors: getSystemColors(),
     webgl_detailed: getWebGLDetailedInfo(),
     extended_apis: getExtendedApis(),
-    math_fp: getMathFingerprint(),
+    math_fp,
     speech_voices: speech_voices,
     plugins: getPluginsInfo(),
     fonts_list: fonts.slice(0, 12),
+    codec_fp,
+    webgpu,
+    tz_locale,
+    canvas_text_metrics,
+    js_runtime,
   };
+
+  // Worker consistency analysis — compare worker realm with main thread
+  client.worker_consistency = analyzeWorkerConsistency(worker_raw, client);
+  client.worker_raw = worker_raw;
+
   const fpSource = JSON.stringify([
     client.browser, client.os, client.device, client.engine,
     client.language, client.languages, client.timezone,
@@ -917,6 +1223,54 @@ function buildLeakItems(server, client) {
       why: 'Включён режим высокого контраста Windows или системные настройки доступности. Редкая комбинация, усиливающая fingerprint.',
       fix: 'Режим высокого контраста можно отключить в настройках ОС, но это влияет на удобство использования.',
     });
+  }
+
+  // Worker/Realm consistency — spoof detection
+  if (client.worker_consistency?.spoof_suspected) {
+    const mList = (client.worker_consistency.mismatches || [])
+      .map(m => `${m.field}: main=${m.main} / worker=${m.worker}`)
+      .join('; ');
+    leaks.push({
+      title: 'Worker realm mismatch',
+      value: mList,
+      level: 'red',
+      why: 'Значения из Web Worker отличаются от главного потока. Наиболее вероятная причина — скрипт или расширение, которое подменяет свойства navigator/Math в window, но не в Worker. Классический способ детекции спуфинга.',
+      fix: 'Если это не намеренный спуфинг — проверь расширения. Браузерные расширения обычно работают только в main-thread и не достигают Web Worker.',
+    });
+  }
+
+  // Timezone / Locale integrity: tz_offset vs. timezone name
+  if (client.tz_locale) {
+    const tz = client.tz_locale.timezone;
+    const off = client.tz_locale.tz_offset_minutes;
+    // Cross-check: Europe/Moscow is UTC+3 (-180 min offset). Detect gross mismatches.
+    if (tz && off != null) {
+      const tzPrefix = tz.split('/')[0];
+      const offsetHours = -off / 60;
+      let suspicious = false;
+      if (tzPrefix === 'America' && offsetHours > 0) suspicious = true;
+      if (tzPrefix === 'Europe'  && offsetHours < -1) suspicious = true;
+      if (tzPrefix === 'Asia'    && offsetHours < 0) suspicious = true;
+      if (suspicious) {
+        leaks.push({
+          title: 'TZ offset vs. name mismatch',
+          value: `Timezone: ${tz}, UTC offset: ${offsetHours > 0 ? '+' : ''}${offsetHours.toFixed(1)}h`,
+          level: 'red',
+          why: 'Временная зона в Intl API и фактическое числовое смещение UTC не соответствуют друг другу. Признак подмены API.',
+          fix: 'Если ты не использовал скрипт для подмены timezone — возможно, ошибка ОС или расширение.',
+        });
+      }
+    }
+    // Locale vs navigator.language mismatch
+    if (client.tz_locale.lang_locale_match === false) {
+      leaks.push({
+        title: 'Locale / Language несоответствие',
+        value: `navigator.language="${client.language}", Intl locale="${client.tz_locale.locale}"`,
+        level: 'yellow',
+        why: 'Язык браузера и язык системной локали Intl API различаются. Может говорить о подмене navigator.language или несогласованных настройках.',
+        fix: 'Убедись, что настройки языка браузера согласованы с системными настройками Intl.',
+      });
+    }
   }
 
   return leaks;
@@ -1603,8 +1957,10 @@ const _RISK_CAT_MAP = {
             'Font fingerprint', 'Battery API', 'Network Info', 'WebDriver',
             'Headless browser', 'Приватный режим', 'UA spoof (touch + desktop)'],
   behavior: ['Timezone mismatch', 'Язык ≠ страна IP', 'System locale mismatch',
-             'PWA standalone mode', 'Forced colors (high contrast)', 'DNT mismatch'],
+             'PWA standalone mode', 'Forced colors (high contrast)', 'DNT mismatch',
+             'TZ offset vs. name mismatch', 'Locale / Language несоответствие'],
   protocol: ['Accept-Encoding: нет brotli', 'Tor exit node'],
+  spoof:    ['Worker realm mismatch', 'TZ offset vs. name mismatch'],
 };
 
 function buildRiskCategories(leaks) {
@@ -1613,6 +1969,7 @@ function buildRiskCategories(leaks) {
     browser:  { label: '🖥 Браузер',       items: [] },
     behavior: { label: '⚠️ Поведение',    items: [] },
     protocol: { label: '🔒 Протокол',      items: [] },
+    spoof:    { label: '🕵️ Спуфинг',      items: [] },
     other:    { label: '📋 Прочее',         items: [] },
   };
   for (const l of leaks) {
@@ -2286,6 +2643,276 @@ function fillExtendedApis(apis) {
   fillFeatureGrid('ext-apis-grid', entries, null);
 }
 
+// ============================================================
+// FILL FUNCTIONS — v12 (new sections)
+// ============================================================
+
+function fillCodecFingerprint(codec) {
+  const grid = $('codec-fp-grid');
+  if (!grid) return;
+  if (!codec) { grid.innerHTML = '<div class="empty">—</div>'; return; }
+  grid.replaceChildren();
+  const yesNo = v => v === 'probably' ? '✅ probably' : v === 'maybe' ? '🟡 maybe' : v === 'no' || !v ? '❌ no' : v;
+  const addRow = (label, value) => {
+    const div = document.createElement('div');
+    div.className = 'kv';
+    const s = document.createElement('span'); s.textContent = label;
+    const strong = document.createElement('strong'); strong.textContent = txt(value);
+    div.appendChild(s); div.appendChild(strong); grid.appendChild(div);
+  };
+  const vf = codec.video || {};
+  const af = codec.audio || {};
+  addRow('H.264 (AVC)',   yesNo(vf.h264));
+  addRow('H.265 (HEVC)',  yesNo(vf.h265));
+  addRow('VP8',           yesNo(vf.vp8));
+  addRow('VP9',           yesNo(vf.vp9));
+  addRow('AV1',           yesNo(vf.av1));
+  addRow('Theora',        yesNo(vf.theora));
+  addRow('MP3',           yesNo(af.mp3));
+  addRow('AAC',           yesNo(af.aac));
+  addRow('Ogg Vorbis',    yesNo(af.ogg_vorbis));
+  addRow('Opus',          yesNo(af.opus));
+  addRow('FLAC',          yesNo(af.flac));
+  addRow('WAV',           yesNo(af.wav));
+  const mc = codec.media_capabilities || {};
+  if (mc.h264_1080p) {
+    const c = mc.h264_1080p;
+    addRow('H.264 1080p (MedCap)', `${c.supported ? '✅' : '❌'} smooth:${c.smooth ? '✅' : '❌'} powerEff:${c.power_efficient ? '✅' : '❌'}`);
+  }
+  if (mc.av1_1080p) {
+    const c = mc.av1_1080p;
+    addRow('AV1 1080p (MedCap)', `${c.supported ? '✅' : '❌'} smooth:${c.smooth ? '✅' : '❌'} powerEff:${c.power_efficient ? '✅' : '❌'}`);
+  }
+}
+
+function fillWebGPU(webgpu) {
+  const grid = $('webgpu-grid');
+  if (!grid) return;
+  if (!webgpu || !webgpu.supported) {
+    grid.innerHTML = `<div class="empty">${webgpu?.supported === false ? '❌ WebGPU не поддерживается' : '—'}</div>`;
+    return;
+  }
+  if (!webgpu.adapter_available) {
+    grid.innerHTML = '<div class="empty">⚠️ WebGPU поддерживается, но адаптер недоступен</div>';
+    return;
+  }
+  grid.replaceChildren();
+  const rows = [
+    ['Vendor',        webgpu.vendor],
+    ['Architecture',  webgpu.architecture],
+    ['Device',        webgpu.device],
+    ['Description',   webgpu.description],
+    ['Fallback',      webgpu.is_fallback != null ? String(webgpu.is_fallback) : null],
+    ['Features',      (webgpu.features || []).join(', ') || '—'],
+  ];
+  const limits = webgpu.limits || {};
+  const limitLabels = {
+    maxTextureDimension2D: 'Max Texture 2D',
+    maxBufferSize:         'Max Buffer Size',
+    maxVertexBuffers:      'Max Vertex Buffers',
+    maxColorAttachments:   'Max Color Attach.',
+    maxBindGroups:         'Max Bind Groups',
+  };
+  for (const [label, value] of rows) {
+    if (!value && value !== false) continue;
+    const div = document.createElement('div'); div.className = 'kv';
+    const s = document.createElement('span'); s.textContent = label;
+    const strong = document.createElement('strong'); strong.style.fontSize = '12px'; strong.textContent = String(value);
+    div.appendChild(s); div.appendChild(strong); grid.appendChild(div);
+  }
+  for (const [k, label] of Object.entries(limitLabels)) {
+    if (limits[k] == null) continue;
+    const div = document.createElement('div'); div.className = 'kv';
+    const s = document.createElement('span'); s.textContent = label;
+    const strong = document.createElement('strong'); strong.textContent = String(limits[k]);
+    div.appendChild(s); div.appendChild(strong); grid.appendChild(div);
+  }
+}
+
+function fillWorkerConsistency(workerRaw, consistency) {
+  const grid = $('worker-consistency-grid');
+  const pillEl = $('worker-consistency-pill');
+  if (!grid) return;
+  if (!workerRaw) {
+    grid.innerHTML = '<div class="empty">—</div>';
+    if (pillEl) pillEl.textContent = '—';
+    return;
+  }
+  if (!workerRaw.supported) {
+    grid.innerHTML = '<div class="empty">❌ Web Workers не поддерживаются</div>';
+    if (pillEl) pillEl.textContent = '❌ Не поддерживается';
+    return;
+  }
+  if (workerRaw.timeout || workerRaw.error) {
+    grid.innerHTML = `<div class="empty">⚠️ ${workerRaw.timeout ? 'Worker timed out' : 'Worker error'}</div>`;
+    if (pillEl) pillEl.textContent = '⚠️ Ошибка';
+    return;
+  }
+  const mismatches = consistency?.mismatches || [];
+  const spoof = consistency?.spoof_suspected;
+  if (pillEl) {
+    pillEl.textContent = spoof ? '🔴 Мисмэтч обнаружен' : '🟢 Совпадает';
+    pillEl.className = (pillEl.className || '') + (spoof ? ' pill red-text' : ' pill green-text');
+  }
+  grid.replaceChildren();
+  const w = workerRaw.result || {};
+  const addRow = (label, value, anomaly) => {
+    const div = document.createElement('div'); div.className = 'kv';
+    const s = document.createElement('span'); s.textContent = label;
+    const strong = document.createElement('strong');
+    strong.style.fontSize = '12px';
+    strong.textContent = value != null ? String(value) : '—';
+    if (anomaly) strong.className = 'red-text';
+    div.appendChild(s); div.appendChild(strong); grid.appendChild(div);
+  };
+  const mf = (field) => mismatches.some(m => m.field === field);
+  addRow('Timezone (Worker)',     w.timezone,            mf('timezone'));
+  addRow('Language (Worker)',     w.language,            mf('language'));
+  addRow('hardwareConcurrency',   w.hardware_concurrency, mf('hardwareConcurrency'));
+  addRow('deviceMemory (Worker)', w.device_memory,       false);
+  addRow('Math.tan (Worker)',     w.math_tan != null ? w.math_tan.toString().slice(0, 20) : null, mf('Math.tan'));
+  addRow('Math.sin (Worker)',     w.math_sin != null ? w.math_sin.toString().slice(0, 20) : null, mf('Math.sin'));
+  addRow('Audio sum (Worker)',    w.audio_sum,           false);
+  if (mismatches.length > 0) {
+    for (const m of mismatches) {
+      const div = document.createElement('div');
+      div.className = 'kv';
+      div.style.gridColumn = '1 / -1';
+      const s = document.createElement('span'); s.textContent = `⚠️ ${m.field}`;
+      const strong = document.createElement('strong');
+      strong.className = 'red-text';
+      strong.style.fontSize = '11px';
+      strong.textContent = `main: ${m.main} ≠ worker: ${m.worker}`;
+      div.appendChild(s); div.appendChild(strong); grid.appendChild(div);
+    }
+  }
+}
+
+function fillTimezoneLocaleIntegrity(tz) {
+  const grid = $('tz-locale-grid');
+  if (!grid) return;
+  if (!tz) { grid.innerHTML = '<div class="empty">—</div>'; return; }
+  grid.replaceChildren();
+  const addRow = (label, value, cls) => {
+    const div = document.createElement('div'); div.className = 'kv';
+    const s = document.createElement('span'); s.textContent = label;
+    const strong = document.createElement('strong');
+    strong.style.fontSize = '12px';
+    strong.textContent = value != null ? String(value) : '—';
+    if (cls) strong.className = cls;
+    div.appendChild(s); div.appendChild(strong); grid.appendChild(div);
+  };
+  const offH = tz.tz_offset_minutes != null ? (-tz.tz_offset_minutes / 60).toFixed(1).replace('.0', '') : '?';
+  addRow('Timezone (Intl)',        tz.timezone);
+  addRow('UTC offset',             `UTC${parseFloat(offH) >= 0 ? '+' : ''}${offH}`);
+  addRow('Locale',                 tz.locale);
+  addRow('Calendar',               tz.calendar);
+  addRow('Numbering system',       tz.numbering_system);
+  addRow('Hour cycle (default)',   tz.hour_cycle);
+  addRow('Hour cycle (explicit)',  tz.hour_cycle_explicit);
+  addRow('Lang / Locale match',    tz.lang_locale_match == null ? '—' : (tz.lang_locale_match ? '✅ Совпадают' : '⚠️ Разные'),
+         tz.lang_locale_match === false ? 'yellow-text' : tz.lang_locale_match ? 'green-text' : '');
+  addRow('Sample date format',     tz.sample_date);
+  if (tz.calendars_supported?.length) addRow('Calendars (sample)', tz.calendars_supported.join(', '));
+  if (tz.numbering_systems?.length) addRow('Numbering systems', tz.numbering_systems.join(', '));
+}
+
+function fillCanvasTextMetrics(metrics) {
+  const grid = $('canvas-text-metrics-grid');
+  if (!grid) return;
+  if (!metrics || !Object.keys(metrics).length) { grid.innerHTML = '<div class="empty">—</div>'; return; }
+  grid.replaceChildren();
+  const sampleNames = { latin: 'Latin', cyrillic: 'Кириллица', emoji: 'Emoji 🎉', arabic: 'Арабский', mixed: 'Mixed', numbers: 'Цифры' };
+  for (const [key, data] of Object.entries(metrics)) {
+    const label = sampleNames[key] || key;
+    if (!data) continue;
+    const div = document.createElement('div'); div.className = 'kv';
+    const s = document.createElement('span'); s.textContent = label;
+    const strong = document.createElement('strong');
+    strong.style.fontSize = '11px'; strong.style.fontFamily = 'var(--mono)';
+    const parts = [`w=${data.width}`];
+    if (data.asc  != null) parts.push(`asc=${data.asc}`);
+    if (data.desc != null) parts.push(`desc=${data.desc}`);
+    strong.textContent = parts.join(' ');
+    div.appendChild(s); div.appendChild(strong); grid.appendChild(div);
+  }
+}
+
+function fillJsRuntime(rt) {
+  const grid = $('js-runtime-grid');
+  if (!grid) return;
+  if (!rt || !Object.keys(rt).length) { grid.innerHTML = '<div class="empty">—</div>'; return; }
+  grid.replaceChildren();
+  const labels = {
+    stack_engine:            'Stack trace engine',
+    stack_first_line:        'Stack first line',
+    fn_str_normalized:       'fn.toString() normal',
+    has_error_cause:         'Error cause',
+    has_array_at:            'Array.at()',
+    has_object_hasown:       'Object.hasOwn()',
+    has_structured_clone:    'structuredClone()',
+    has_array_group_by:      'groupBy()',
+    has_promise_any:         'Promise.any()',
+    has_string_replaceall:   'String.replaceAll()',
+    regex_unicode_props:     'Regex \\p{L}/u',
+    regex_dotall:            'Regex /s flag',
+    num_0_1_plus_0_2_len:    '0.1+0.2 len',
+    error_name_overridable:  'Error.name override',
+  };
+  for (const [k, label] of Object.entries(labels)) {
+    if (rt[k] === undefined) continue;
+    const div = document.createElement('div'); div.className = 'kv';
+    const s = document.createElement('span'); s.textContent = label;
+    const strong = document.createElement('strong');
+    strong.style.fontSize = '11px';
+    const v = rt[k];
+    if (typeof v === 'boolean') {
+      strong.textContent = v ? '✅ yes' : '❌ no';
+      strong.className = v ? 'green-text' : '';
+    } else {
+      strong.textContent = String(v).slice(0, 60);
+    }
+    div.appendChild(s); div.appendChild(strong); grid.appendChild(div);
+  }
+}
+
+function fillEntropyScores(scores) {
+  const grid = $('entropy-scores-grid');
+  if (!grid) return;
+  if (!scores || !scores.length) { grid.innerHTML = '<div class="empty">—</div>'; return; }
+  grid.replaceChildren();
+  const totalBits = scores.reduce((s, x) => s + x.bits, 0);
+  const totalMax  = scores.reduce((s, x) => s + x.max, 0);
+  const summaryDiv = document.createElement('div');
+  summaryDiv.className = 'entropy-summary';
+  summaryDiv.textContent = `Всего ≈ ${totalBits} / ${totalMax} бит`;
+  grid.appendChild(summaryDiv);
+  for (const sec of scores) {
+    const item = document.createElement('div');
+    item.className = 'entropy-item';
+    const header = document.createElement('div');
+    header.className = 'entropy-header';
+    const name = document.createElement('span');
+    name.className = 'entropy-name';
+    name.textContent = sec.name;
+    const bits = document.createElement('span');
+    bits.className = 'entropy-bits';
+    bits.textContent = `${sec.bits} / ${sec.max} бит`;
+    header.appendChild(name);
+    header.appendChild(bits);
+    const bar = document.createElement('div');
+    bar.className = 'entropy-bar';
+    const fill = document.createElement('span');
+    const pct = Math.round(sec.bits / sec.max * 100);
+    fill.className = pct >= 75 ? 'danger' : pct >= 40 ? 'warn' : 'safe';
+    fill.style.width = `${pct}%`;
+    bar.appendChild(fill);
+    item.appendChild(header);
+    item.appendChild(bar);
+    grid.appendChild(item);
+  }
+}
+
 async function sendCollect(visitId, client, score, risk, server) {
   try {
     const res = await fetch('./collect.php', {
@@ -2367,6 +2994,14 @@ async function loadAll() {
     fillSystemColors(client.system_colors || null);
     fillMathFingerprint(client.math_fp || null);
     fillSpeechAndPlugins(client.speech_voices || null, client.plugins || null);
+    // v12 new sections
+    fillCodecFingerprint(client.codec_fp || null);
+    fillWebGPU(client.webgpu || null);
+    fillWorkerConsistency(client.worker_raw || null, client.worker_consistency || null);
+    fillTimezoneLocaleIntegrity(client.tz_locale || null);
+    fillCanvasTextMetrics(client.canvas_text_metrics || null);
+    fillJsRuntime(client.js_runtime || null);
+    fillEntropyScores(computeSectionEntropyScores(client, server));
 
     const combined = {
       timestamp_iso8601: apiData.timestamp_iso8601,
